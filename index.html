@@ -16,55 +16,70 @@
         body { background-color: #000; color: var(--text-white); display: flex; justify-content: center; min-height: 100vh; overflow-x: hidden; }
         .app-container { width: 100%; max-width: 450px; background: var(--app-bg); min-height: 100vh; position: relative; padding: 20px; padding-bottom: 120px; }
 
+        /* Header Fix */
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; height: 60px; }
         .brand { display: flex; align-items: center; gap: 8px; }
         .arc-logo { width: 28px; height: 28px; background: var(--arc-gradient); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; }
         .app-logo { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase; }
         .app-logo span { color: var(--buy-green); }
         
-        #walletWrapper { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-        .btn-connect { background: var(--accent-blue); color: white; padding: 8px 16px; border-radius: 12px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; }
-        #disconnectBtn { font-size: 9px; color: var(--sell-red); background: none; border: none; cursor: pointer; font-weight: 800; text-transform: uppercase; padding: 2px 5px; }
+        /* Glass Button & Dropdown Styles */
+        .glass { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: white; cursor: pointer; }
+        .dropdown-menu { 
+            display: none; position: absolute; right: 0; top: 45px; 
+            background: white; min-width: 160px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
+            border-radius: 12px; z-index: 1000; overflow: hidden; 
+        }
+        .dropdown-menu.show { display: block !important; }
+        .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        .bg-red-500 { background-color: #ef4444; }
+        .bg-green-500 { background-color: #22c55e; }
+        .rounded-full { border-radius: 9999px; }
 
+        /* Screens & Layout */
         .screen { display: none; }
         .screen.active { display: block; animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
         .portfolio-main { background: linear-gradient(135deg, #ff4d6d, #ff85a1); padding: 25px; border-radius: 28px; margin-bottom: 25px; }
         .portfolio-main h1 { font-size: 32px; font-weight: 800; margin: 5px 0; }
-        
         .section-header { display: flex; justify-content: space-between; align-items: center; margin: 20px 0 15px; }
         .featured-scroll { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 15px; scrollbar-width: none; }
         .featured-card { min-width: 165px; background: var(--card-bg); padding: 20px; border-radius: 24px; cursor: pointer; border: 1px solid rgba(255,255,255,0.05); }
-        .f-logo { width: 35px; height: 35px; border-radius: 50%; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: white; }
-
         .trade-card { background: var(--card-bg); padding: 20px; border-radius: 24px; border: 1px solid var(--border); margin-bottom: 25px; }
         .input-box { margin-bottom: 15px; }
         .input-box label { display: block; font-size: 10px; color: var(--text-dim); margin-bottom: 6px; font-weight: 700; text-transform: uppercase; }
         .input-box select, .input-box input { width: 100%; padding: 12px 15px; background: #000; border: 1px solid var(--border); border-radius: 12px; color: white; font-weight: 600; outline: none; }
         .calc-row { display: flex; justify-content: space-between; padding: 12px; margin-bottom: 15px; background: rgba(255,255,255,0.03); border-radius: 12px; }
-        
         .btn-container { display: flex; gap: 10px; }
         .trade-btn { flex: 1; padding: 16px; border-radius: 14px; border: none; font-weight: 800; cursor: pointer; color: white; }
         .btn-buy { background: var(--buy-green); }
         .btn-sell { background: var(--sell-red); }
-
         .watchlist-item { background: var(--card-bg); padding: 18px; border-radius: 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; cursor: pointer; }
-        .w-info { display: flex; align-items: center; gap: 12px; }
-        .w-logo { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; color: white; }
-
         .bottom-nav { position: fixed; bottom: 20px; width: calc(100% - 40px); max-width: 410px; background: rgba(20, 25, 40, 0.95); backdrop-filter: blur(20px); border-radius: 35px; display: flex; justify-content: space-around; padding: 12px; border: 1px solid rgba(255,255,255,0.05); }
         .nav-item { display: flex; flex-direction: column; align-items: center; cursor: pointer; color: var(--text-dim); flex: 1; }
         .nav-item.active { color: white; }
-        .nav-icon { font-size: 18px; margin-bottom: 2px; }
-        .nav-text { font-size: 9px; font-weight: 700; }
     </style>
 </head>
 <body>
     <div class="app-container">
         <header class="header">
-            <div class="brand"><div class="arc-logo">A</div><div class="app-logo">INDI<span>STOCK</span></div></div>
-            <div id="walletWrapper"><button class="btn-connect" id="walletBtn">Connect Wallet</button></div>
+            <div class="brand">
+                <div class="arc-logo">A</div>
+                <div class="app-logo">INDI<span>STOCK</span></div>
+            </div>
+            
+            <!-- CONNECT WALLET DROPDRDOWN ADDED HERE -->
+            <div style="position: relative;">
+                <button id="walletBtn" onclick="toggleProfile()" class="glass" style="padding: 8px 16px; display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 900; text-transform: uppercase;">
+                    <span id="dot" class="bg-red-500 animate-pulse" style="width: 8px; height: 8px; border-radius: 50%;"></span>
+                    <span id="walletLabel">Connect Wallet</span>
+                </button>
+                <div id="profileMenu" class="dropdown-menu">
+                    <button onclick="copyAddr()" style="width: 100%; text-align: left; padding: 12px 16px; border: none; background: none; border-bottom: 1px solid #eee; font-weight: 700; font-size: 12px; cursor: pointer;">Copy Address</button>
+                    <button onclick="disconnectWallet()" style="width: 100%; text-align: left; padding: 12px 16px; border: none; background: none; color: #ef4444; font-weight: 700; font-size: 12px; cursor: pointer;">Disconnect</button>
+                </div>
+            </div>
         </header>
 
         <div id="home" class="screen active">
@@ -73,10 +88,10 @@
                 <h1 id="userPortfolio">₹0.00</h1>
                 <p>↗ ₹0.00 (+0.00%)</p>
             </div>
-            <div class="section-header"><h3>Featured Investments</h3><span style="font-size:12px; color:var(--text-dim);">See all</span></div>
-            <div class="featured-scroll" id="featuredList"></div> <!-- app.js fills this -->
-            <div class="section-header"><h3>My Watchlist</h3><span style="font-size:12px; color:var(--text-dim);">See all</span></div>
-            <div id="homeWatchlist"></div> <!-- app.js fills this -->
+            <div class="section-header"><h3>Featured Investments</h3></div>
+            <div class="featured-scroll" id="featuredList"></div>
+            <div class="section-header"><h3>My Watchlist</h3></div>
+            <div id="homeWatchlist"></div>
         </div>
 
         <div id="market" class="screen">
@@ -93,7 +108,7 @@
                 </div>
             </div>
             <h3>Market Overview</h3>
-            <div id="marketList"></div> <!-- app.js fills this -->
+            <div id="marketList"></div>
         </div>
 
         <div id="portfolio" class="screen"><h3>My Assets</h3></div>
