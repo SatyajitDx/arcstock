@@ -24,7 +24,10 @@
         .arc-logo { width: 28px; height: 28px; background: var(--arc-gradient); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; }
         .app-logo { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase; }
         .app-logo span { color: var(--buy-green); }
-        .btn-connect { background: var(--accent-blue); color: white; padding: 8px 16px; border-radius: 12px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; }
+        
+        /* Updated Wallet Button Styles */
+        .btn-connect { background: var(--accent-blue); color: white; padding: 8px 16px; border-radius: 12px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.3s; }
+        .btn-connected { background: var(--buy-green) !important; }
 
         /* Screens */
         .screen { display: none; animation: fadeIn 0.3s ease; }
@@ -59,8 +62,6 @@
         .watchlist-item { background: var(--card-bg); padding: 18px; border-radius: 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; cursor: pointer; transition: 0.2s; }
         .w-info { display: flex; align-items: center; gap: 12px; }
         .w-logo { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; color: white; }
-        .w-name p:first-child { font-weight: 700; font-size: 14px; }
-        .w-name p:last-child { color: var(--text-dim); font-size: 10px; }
 
         /* Bottom Nav */
         .bottom-nav { position: fixed; bottom: 20px; width: calc(100% - 40px); max-width: 410px; background: rgba(20, 25, 40, 0.95); backdrop-filter: blur(20px); border-radius: 35px; display: flex; justify-content: space-around; padding: 12px; border: 1px solid rgba(255,255,255,0.05); }
@@ -144,17 +145,8 @@
             <div id="marketList"></div>
         </div>
 
-        <!-- PORTFOLIO SCREEN -->
-        <div id="portfolio" class="screen">
-            <h3>My Portfolio</h3>
-            <div id="holdingsList" style="margin-top:20px;"></div>
-        </div>
-
-        <!-- HISTORY SCREEN -->
-        <div id="history" class="screen">
-            <h3>History</h3>
-            <div id="txList" style="margin-top:20px;"></div>
-        </div>
+        <div id="portfolio" class="screen"><h3>My Assets</h3><div id="holdingsList" style="margin-top:20px;"></div></div>
+        <div id="history" class="screen"><h3>History</h3><div id="txList" style="margin-top:20px;"></div></div>
 
         <!-- BOTTOM NAV -->
         <nav class="bottom-nav">
@@ -186,7 +178,6 @@
             });
         }
 
-        // New function to jump from Home to Trade page
         function goToTrade(price) {
             switchTab('market', document.querySelectorAll('.nav-item')[1]);
             document.getElementById('stockSelect').value = price;
@@ -195,17 +186,30 @@
 
         async function connect() {
             if(!window.ethereum) return alert("Install Metamask");
-            const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-            userAddr = accounts[0];
-            provider = new ethers.providers.Web3Provider(window.ethereum);
-            signer = provider.getSigner();
-            document.getElementById("walletBtn").innerText = userAddr.substring(0,6)+"..."+userAddr.slice(-4).toUpperCase();
-            fetchBalance();
+            try {
+                // Request Metamask to connect
+                const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+                userAddr = accounts[0];
+                
+                // Initialize ethers
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+
+                // UI Update: Button text and color
+                const btn = document.getElementById("walletBtn");
+                const shortAddr = userAddr.substring(0, 6) + "..." + userAddr.substring(userAddr.length - 4);
+                btn.innerText = shortAddr;
+                btn.classList.add("btn-connected"); // Adds the green color from CSS
+
+                fetchBalance();
+            } catch (error) {
+                console.error("Connection failed", error);
+            }
         }
 
         function updateCalc() {
             const price = document.getElementById("stockSelect").value;
-            const qty = document.getElementById("tradeQty").value;
+            const qty = document.getElementById("tradeQty").value || 1;
             const inr = price * qty;
             document.getElementById("calcInr").innerText = "₹" + inr.toLocaleString();
             document.getElementById("calcUsdc").innerText = (inr / INR_RATE).toFixed(2) + " USDC";
@@ -233,10 +237,14 @@
 
         async function fetchBalance() {
             if(!userAddr) return;
-            const contract = new ethers.Contract(USDC_ADDR, ["function balanceOf(address) view returns (uint256)"], provider);
-            const bal = await contract.balanceOf(userAddr);
-            const f = ethers.utils.formatUnits(bal, 6);
-            document.getElementById("userPortfolio").innerText = "₹" + (f * INR_RATE).toLocaleString('en-IN');
+            try {
+                const contract = new ethers.Contract(USDC_ADDR, ["function balanceOf(address) view returns (uint256)"], provider);
+                const bal = await contract.balanceOf(userAddr);
+                const f = ethers.utils.formatUnits(bal, 6);
+                document.getElementById("userPortfolio").innerText = "₹" + (f * INR_RATE).toLocaleString('en-IN');
+            } catch (e) {
+                console.error("Balance update failed");
+            }
         }
 
         window.onload = init;
