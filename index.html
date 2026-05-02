@@ -18,7 +18,7 @@
 
         .app-container { width: 100%; max-width: 450px; background: var(--app-bg); min-height: 100vh; position: relative; padding: 20px; padding-bottom: 120px; }
 
-        /* Header */
+        /* Header Updated with Wallet Container */
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand { display: flex; align-items: center; gap: 8px; }
         .arc-logo { width: 28px; height: 28px; background: var(--arc-gradient); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; }
@@ -73,13 +73,15 @@
 <body>
 
     <div class="app-container">
-        <!-- Brand Header -->
+        <!-- Brand Header with Wallet Container for Disconnect Button -->
         <header class="header">
             <div class="brand">
                 <div class="arc-logo">A</div>
                 <div class="app-logo">INDI<span>STOCK</span></div>
             </div>
-            <button class="btn-connect" id="walletBtn" onclick="connect()">Connect Wallet</button>
+            <div id="walletContainer" style="display: flex; flex-direction: column; align-items: flex-end;">
+                <button class="btn-connect" id="walletBtn" onclick="connect()">Connect Wallet</button>
+            </div>
         </header>
 
         <!-- HOME SCREEN -->
@@ -169,6 +171,8 @@
         const USDC_ADDR = "0x3600000000000000000000000000000000000000";
         const MERCHANT = "0x7a67f9b3BB918182Ad94182aC10f80F9619be81C";
         const INR_RATE = 94.25;
+        const ARC_CHAIN_ID = '0x4cef52'; 
+        const RPC_URL = 'https://rpc.testnet.arc.network';
         let userAddr = "", provider, signer;
 
         const stocks = [
@@ -186,21 +190,76 @@
             });
         }
 
-        // New function to jump from Home to Trade page
         function goToTrade(price) {
             switchTab('market', document.querySelectorAll('.nav-item')[1]);
             document.getElementById('stockSelect').value = price;
             updateCalc();
         }
 
+        // Updated Connect UI with Disconnect logic
         async function connect() {
             if(!window.ethereum) return alert("Install Metamask");
-            const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-            userAddr = accounts[0];
-            provider = new ethers.providers.Web3Provider(window.ethereum);
-            signer = provider.getSigner();
-            document.getElementById("walletBtn").innerText = userAddr.substring(0,6)+"..."+userAddr.slice(-4).toUpperCase();
-            fetchBalance();
+            try {
+                const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+                
+                // Switch chain logic
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: ARC_CHAIN_ID }],
+                    });
+                } catch (err) {
+                    if (err.code === 4902) {
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [{
+                                chainId: ARC_CHAIN_ID,
+                                chainName: 'Arc Testnet',
+                                rpcUrls: [RPC_URL],
+                                nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
+                                blockExplorerUrls: ['https://testnet.arcscan.app']
+                            }]
+                        });
+                    }
+                }
+
+                userAddr = accounts[0];
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+                
+                updateWalletUI(true);
+                fetchBalance();
+            } catch(e) { console.error(e); }
+        }
+
+        function disconnect() {
+            userAddr = ""; provider = null; signer = null;
+            updateWalletUI(false);
+            document.getElementById("userPortfolio").innerText = "₹0.00";
+        }
+
+        function updateWalletUI(isConnected) {
+            const walletBtn = document.getElementById("walletBtn");
+            const container = document.getElementById("walletContainer");
+            const oldDsc = document.getElementById("disconnectBtn");
+            if (oldDsc) oldDsc.remove();
+
+            if (isConnected) {
+                walletBtn.innerText = userAddr.substring(0,4) + "..." + userAddr.slice(-5).toUpperCase();
+                walletBtn.style.background = "var(--buy-green)";
+                walletBtn.onclick = null;
+
+                const dscBtn = document.createElement("button");
+                dscBtn.id = "disconnectBtn";
+                dscBtn.innerText = "Disconnect Wallet";
+                dscBtn.style.cssText = "display:block;margin-top:6px;font-size:10px;color:var(--sell-red);background:none;border:none;cursor:pointer;font-weight:800;text-transform:uppercase;";
+                dscBtn.onclick = disconnect;
+                container.appendChild(dscBtn);
+            } else {
+                walletBtn.innerText = "Connect Wallet";
+                walletBtn.style.background = "var(--accent-blue)";
+                walletBtn.onclick = connect;
+            }
         }
 
         function updateCalc() {
