@@ -31,7 +31,7 @@
         .screen.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* Home Page */
+        /* Home Page Components */
         .portfolio-main { background: linear-gradient(135deg, #ff4d6d, #ff85a1); padding: 25px; border-radius: 28px; margin-bottom: 25px; }
         .portfolio-main h1 { font-size: 32px; font-weight: 800; margin: 5px 0; }
         
@@ -166,16 +166,25 @@
     </div>
 
     <script>
+        // --- CONSTANTS & CONFIGURATION ---
+        // USDC Token Address on Arc Testnet (Assuming standard ERC20 interface)
         const USDC_ADDR = "0x3600000000000000000000000000000000000000";
+        // Merchant Wallet Address where payments are sent
         const MERCHANT = "0x7a67f9b3BB918182Ad94182aC10f80F9619be81C";
-        const INR_RATE = 94.25;
+        // Network Configuration for Automatic Switching
+        const ARC_CHAIN_ID = '0x4cef52'; // Hexadecimal Chain ID for Arc Testnet
+        const RPC_URL = 'https://rpc.testnet.arc.network';
+        const INR_RATE = 94.25; // Pre-set conversion rate 1 USDC = 94.25 INR
+        
         let userAddr = "", provider, signer;
 
+        // Stocks Data for Market Overview
         const stocks = [
             {n:"RELIANCE", p:2985}, {n:"HDFCBANK", p:1532}, {n:"TCS", p:3945}, {n:"TATAMOTORS", p:1012}, {n:"SBIN", p:825},
             {n:"ZOMATO", p:188}, {n:"ADANIENT", p:3120}, {n:"ITC", p:420}, {n:"WIPRO", p:455}, {n:"TITAN", p:3240}
         ];
 
+        // --- INITIALIZATION ---
         function init() {
             const list = document.getElementById("marketList");
             stocks.forEach(s => {
@@ -186,28 +195,67 @@
             });
         }
 
-        // New function to jump from Home to Trade page
-        function goToTrade(price) {
-            switchTab('market', document.querySelectorAll('.nav-item')[1]);
-            document.getElementById('stockSelect').value = price;
-            updateCalc();
-        }
-
+        // --- WALLET & NETWORK CORE FUNCTIONS (FIXED) ---
         async function connect() {
-            if(!window.ethereum) return alert("Install Metamask");
-            const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-            userAddr = accounts[0];
-            provider = new ethers.providers.Web3Provider(window.ethereum);
-            signer = provider.getSigner();
-            document.getElementById("walletBtn").innerText = userAddr.substring(0,6)+"..."+userAddr.slice(-4).toUpperCase();
-            fetchBalance();
+            if (!window.ethereum) return alert("Install Metamask extension in your browser.");
+
+            try {
+                // 1. Request Wallet Connection
+                const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+                
+                // 2. Setup Automatic Network Switching Logic
+                try {
+                    // Try to switch to Arc Testnet
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: ARC_CHAIN_ID }],
+                    });
+                } catch (switchError) {
+                    // This error code (4902) means the chain has not been added to MetaMask.
+                    if (switchError.code === 4902) {
+                        try {
+                            await window.ethereum.request({
+                                method: 'wallet_addEthereumChain',
+                                params: [{
+                                    chainId: ARC_CHAIN_ID,
+                                    chainName: 'Arc Testnet',
+                                    rpcUrls: [RPC_URL],
+                                    nativeCurrency: {
+                                        name: 'USDC',
+                                        symbol: 'USDC', // Arc uses USDC for native gas
+                                        decimals: 18
+                                    },
+                                    blockExplorerUrls: ['https://testnet.arcscan.app']
+                                }]
+                            });
+                        } catch (addError) {
+                            console.error("Could not add Arc Testnet chain:", addError);
+                        }
+                    }
+                    console.error("Could not switch to Arc Testnet chain:", switchError);
+                }
+
+                // 3. Initialize Ethers and Update UI
+                userAddr = accounts[0];
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+                
+                // Format Address to show prefix and last 4 chars (0x...ABCD)
+                document.getElementById("walletBtn").innerText = userAddr.substring(0,6)+"..."+userAddr.slice(-4).toUpperCase();
+                
+                fetchBalance();
+                
+            } catch (e) {
+                console.error("Wallet connection or network switching failed", e);
+            }
         }
 
+        // --- TRADING & CALCULATION LOGIC ---
         function updateCalc() {
             const price = document.getElementById("stockSelect").value;
-            const qty = document.getElementById("tradeQty").value;
+            const qty = document.getElementById("tradeQty").value || 1;
             const inr = price * qty;
-            document.getElementById("calcInr").innerText = "₹" + inr.toLocaleString();
+            document.getElementById("calcInr").innerText = "₹" + inr.toLocaleString('en-IN');
             document.getElementById("calcUsdc").innerText = (inr / INR_RATE).toFixed(2) + " USDC";
         }
 
@@ -216,14 +264,18 @@
             try {
                 const usdcAmt = document.getElementById("calcUsdc").innerText.split(' ')[0];
                 const contract = new ethers.Contract(USDC_ADDR, ["function transfer(address to, uint256 value) public returns (bool)"], signer);
-                const tx = await contract.transfer(MERCHANT, ethers.utils.parseUnits(usdcAmt, 6));
-                alert(`Order processing...`);
+                const tx = await contract.transfer(MERCHANT, ethers.utils.parseUnits(usdcAmt, 6)); // Assumes USDC has 6 decimals
+                alert(`Blockchain Order sent... Waiting for confirmation.`);
                 await tx.wait();
-                alert(`Transaction Confirmed! Stock ${type} completed.`);
+                alert(`Transaction Confirmed! Stock ${type} order completed.`);
                 fetchBalance();
-            } catch(e) { alert("Transaction Failed!"); }
+            } catch(e) { 
+                alert("Transaction Failed! Ensure you have sufficient USDC balance."); 
+                console.error(e);
+            }
         }
 
+        // --- NAVIGATION & UI UTILS ---
         function switchTab(id, el) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             document.getElementById(id).classList.add('active');
@@ -231,12 +283,22 @@
             if(el) el.classList.add('active');
         }
 
+        function goToTrade(price) {
+            switchTab('market', document.querySelectorAll('.nav-item')[1]);
+            document.getElementById('stockSelect').value = price;
+            updateCalc();
+        }
+
         async function fetchBalance() {
             if(!userAddr) return;
-            const contract = new ethers.Contract(USDC_ADDR, ["function balanceOf(address) view returns (uint256)"], provider);
-            const bal = await contract.balanceOf(userAddr);
-            const f = ethers.utils.formatUnits(bal, 6);
-            document.getElementById("userPortfolio").innerText = "₹" + (f * INR_RATE).toLocaleString('en-IN');
+            try {
+                const contract = new ethers.Contract(USDC_ADDR, ["function balanceOf(address) view returns (uint256)"], provider);
+                const bal = await contract.balanceOf(userAddr);
+                const f = ethers.utils.formatUnits(bal, 6);
+                document.getElementById("userPortfolio").innerText = "₹" + (parseFloat(f) * INR_RATE).toLocaleString('en-IN');
+            } catch(e) {
+                console.error("Could not fetch blockchain balance", e);
+            }
         }
 
         window.onload = init;
