@@ -1,3 +1,9 @@
+/**
+ * INDISTOCK - Decentralized Indian Equity Logic
+ * Unified app.js based on your HTML structure
+ */
+
+// --- CONFIGURATION ---
 const USDC_ADDR = "0x3600000000000000000000000000000000000000";
 const MERCHANT = "0x7a67f9b3BB918182Ad94182aC10f80F9619be81C";
 const ARC_CHAIN_ID = '0x4cef52'; 
@@ -6,7 +12,34 @@ const INR_RATE = 94.25;
 
 let userAddr = "", provider, signer;
 
-// --- WALLET CONNECTION LOGIC ---
+const stocks = [
+    {n:"RELIANCE", p:2985}, {n:"HDFCBANK", p:1532}, {n:"TCS", p:3945}, 
+    {n:"TATAMOTORS", p:1012}, {n:"SBIN", p:825}, {n:"ZOMATO", p:188}, 
+    {n:"ADANIENT", p:3120}, {n:"ITC", p:420}, {n:"WIPRO", p:455}, {n:"TITAN", p:3240}
+];
+
+// --- INITIALIZATION ---
+function init() {
+    const list = document.getElementById("marketList");
+    if (list) {
+        list.innerHTML = ""; // Clear list
+        stocks.forEach(s => {
+            list.innerHTML += `
+                <div class="watchlist-item" onclick="goToTrade('${s.p}')">
+                    <div class="w-info">
+                        <div class="w-logo" style="background:#334155;">${s.n[0]}</div>
+                        <div class="w-name">
+                            <p>${s.n}</p>
+                            <p>Equity Token</p>
+                        </div>
+                    </div>
+                    <p>₹${s.p}</p>
+                </div>`;
+        });
+    }
+}
+
+// --- WALLET CORE LOGIC ---
 async function connect() {
     if (!window.ethereum) return alert("MetaMask is not installed!");
 
@@ -46,33 +79,31 @@ async function connect() {
     }
 }
 
-// --- DISCONNECT LOGIC ---
 function disconnect() {
     userAddr = "";
     provider = null;
     signer = null;
     updateWalletUI(false);
     document.getElementById("userPortfolio").innerText = "₹0.00";
-    alert("Wallet Disconnected");
 }
 
-// --- UI UPDATE LOGIC ---
+// --- UI UPDATES (ADDRESS & DISCONNECT) ---
 function updateWalletUI(isConnected) {
     const walletBtn = document.getElementById("walletBtn");
     const container = walletBtn.parentElement;
     
-    // Remove old disconnect button if it exists
+    // Remove existing disconnect button if any
     const oldDsc = document.getElementById("disconnectBtn");
     if (oldDsc) oldDsc.remove();
 
     if (isConnected) {
-        // Address format: 0x... + last 5 characters
+        // Format: 0x... (last 5 words/characters)
         const formattedAddr = userAddr.substring(0, 4) + "..." + userAddr.slice(-5).toUpperCase();
         walletBtn.innerText = formattedAddr;
         walletBtn.style.background = "var(--buy-green)";
-        walletBtn.onclick = null; // Address button click disabled
+        walletBtn.onclick = null; // Disable connect click while connected
 
-        // Add Disconnect Button below
+        // Create and append Disconnect Button
         const dscBtn = document.createElement("button");
         dscBtn.id = "disconnectBtn";
         dscBtn.innerText = "Disconnect Wallet";
@@ -98,15 +129,53 @@ function updateWalletUI(isConnected) {
     }
 }
 
-// --- BALANCE & NAV UTILS ---
+// --- TRADING LOGIC ---
+function updateCalc() {
+    const price = document.getElementById("stockSelect").value;
+    const qty = document.getElementById("tradeQty").value;
+    const inr = price * qty;
+    document.getElementById("calcInr").innerText = "₹" + inr.toLocaleString('en-IN');
+    document.getElementById("calcUsdc").innerText = (inr / INR_RATE).toFixed(2) + " USDC";
+}
+
+async function processTrade(type) {
+    if (!userAddr) return connect();
+    
+    const btn = event.target;
+    try {
+        const usdcAmt = document.getElementById("calcUsdc").innerText.split(' ')[0];
+        btn.innerText = "WAITING...";
+
+        const contract = new ethers.Contract(USDC_ADDR, [
+            "function transfer(address to, uint256 value) public returns (bool)"
+        ], signer);
+
+        const tx = await contract.transfer(MERCHANT, ethers.utils.parseUnits(usdcAmt, 6));
+        
+        btn.innerText = "CONFIRMING...";
+        await tx.wait();
+        
+        alert(`Stock ${type} Completed Successfully!`);
+        fetchBalance();
+    } catch (e) {
+        console.error(e);
+        alert("Transaction Failed!");
+    } finally {
+        btn.innerText = type;
+    }
+}
+
+// --- UTILS ---
 async function fetchBalance() {
-    if(!userAddr) return;
+    if (!userAddr) return;
     try {
         const contract = new ethers.Contract(USDC_ADDR, ["function balanceOf(address) view returns (uint256)"], provider);
         const bal = await contract.balanceOf(userAddr);
         const f = ethers.utils.formatUnits(bal, 6);
         document.getElementById("userPortfolio").innerText = "₹" + (parseFloat(f) * INR_RATE).toLocaleString('en-IN');
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 function switchTab(id, el) {
@@ -119,10 +188,7 @@ function switchTab(id, el) {
 function goToTrade(price) {
     switchTab('market', document.querySelectorAll('.nav-item')[1]);
     document.getElementById('stockSelect').value = price;
-    if(typeof updateCalc === 'function') updateCalc();
+    updateCalc();
 }
 
-window.onload = () => {
-    // Initial UI Setup
-    updateWalletUI(false);
-};
+window.onload = init;
