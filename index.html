@@ -30,7 +30,7 @@
         .screen.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* Home Page - Original Style */
+        /* Home Page */
         .portfolio-main { background: linear-gradient(135deg, #ff4d6d, #ff85a1); padding: 25px; border-radius: 28px; margin-bottom: 25px; }
         .portfolio-main h1 { font-size: 32px; font-weight: 800; margin: 5px 0; }
         
@@ -39,7 +39,7 @@
         .featured-card { min-width: 165px; background: var(--card-bg); padding: 20px; border-radius: 24px; cursor: pointer; border: 1px solid rgba(255,255,255,0.05); }
         .f-logo { width: 35px; height: 35px; border-radius: 50%; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: white; }
 
-        /* Market - Trade Card with BOTH Options */
+        /* Market Card */
         .trade-card { background: var(--card-bg); padding: 20px; border-radius: 24px; border: 1px solid var(--border); margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         .input-box { margin-bottom: 15px; }
         .input-box label { display: block; font-size: 10px; color: var(--text-dim); margin-bottom: 6px; font-weight: 700; text-transform: uppercase; }
@@ -53,12 +53,12 @@
         .trade-btn { flex: 1; padding: 16px; border-radius: 14px; border: none; font-weight: 800; cursor: pointer; color: white; transition: 0.2s; }
         .btn-buy { background: var(--buy-green); }
         .btn-sell { background: var(--sell-red); }
-        .trade-btn:active { transform: scale(0.95); }
 
-        /* List Items */
-        .watchlist-item { background: var(--card-bg); padding: 15px; border-radius: 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; cursor: pointer; }
+        /* Watchlist Items */
+        .watchlist-item { background: var(--card-bg); padding: 15px; border-radius: 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; cursor: pointer; transition: 0.2s; }
         .w-info { display: flex; align-items: center; gap: 12px; }
         .w-logo { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; color: white; }
+        .w-name p:last-child { font-size: 10px; color: var(--text-dim); }
 
         /* Bottom Nav */
         .bottom-nav { position: fixed; bottom: 20px; width: calc(100% - 40px); max-width: 410px; background: rgba(20, 25, 40, 0.95); backdrop-filter: blur(20px); border-radius: 35px; display: flex; justify-content: space-around; padding: 12px; border: 1px solid rgba(255,255,255,0.05); }
@@ -92,9 +92,22 @@
             </div>
 
             <div class="section-header"><h3>My Watchlist</h3><span style="font-size:12px; color:var(--text-dim);">See all</span></div>
+            <!-- Updated Watchlist with More Stocks -->
             <div class="watchlist-item" onclick="switchTab('market')">
-                <div class="w-info"><div class="w-logo" style="background:#ff8c00;">T</div><div class="w-name"><p>TATAMOTORS</p><p style="font-size:10px; color:var(--text-dim);">Tata Motors Ltd</p></div></div>
+                <div class="w-info"><div class="w-logo" style="background:#ff8c00;">T</div><div class="w-name"><p>TATAMOTORS</p><p>Tata Motors Ltd</p></div></div>
                 <p style="font-weight:700;">₹1,012 <span style="color:var(--sell-red); font-size:10px;">-6.3%</span></p>
+            </div>
+            <div class="watchlist-item" onclick="switchTab('market')">
+                <div class="w-info"><div class="w-logo" style="background:#007cc3;">S</div><div class="w-name"><p>SBIN</p><p>State Bank of India</p></div></div>
+                <p style="font-weight:700;">₹825 <span style="color:var(--buy-green); font-size:10px;">+1.2%</span></p>
+            </div>
+            <div class="watchlist-item" onclick="switchTab('market')">
+                <div class="w-info"><div class="w-logo" style="background:#4b2b8d;">W</div><div class="w-name"><p>WIPRO</p><p>Wipro Limited</p></div></div>
+                <p style="font-weight:700;">₹455 <span style="color:var(--sell-red); font-size:10px;">-0.8%</span></p>
+            </div>
+            <div class="watchlist-item" onclick="switchTab('market')">
+                <div class="w-info"><div class="w-logo" style="background:#8b1a1a;">T</div><div class="w-name"><p>TITAN</p><p>Titan Company</p></div></div>
+                <p style="font-weight:700;">₹3,240 <span style="color:var(--buy-green); font-size:10px;">+2.5%</span></p>
             </div>
         </div>
 
@@ -124,13 +137,13 @@
                     <button class="trade-btn btn-sell" onclick="processTrade('SELL')">SELL</button>
                 </div>
             </div>
-            <h3 style="margin-bottom:15px;">Market Overview</h3>
+            <h3 style="margin-bottom:15px;">Market Trends</h3>
             <div id="marketList"></div>
         </div>
 
         <!-- PORTFOLIO SCREEN -->
         <div id="portfolio" class="screen">
-            <h3>My Assets</h3>
+            <h3>My Portfolio</h3>
             <div id="holdingsList" style="margin-top:20px;"></div>
         </div>
 
@@ -176,7 +189,7 @@
             userAddr = accounts[0];
             provider = new ethers.providers.Web3Provider(window.ethereum);
             signer = provider.getSigner();
-            document.getElementById("walletBtn").innerText = userAddr.substring(0,6)+"..."+userAddr.slice(-4);
+            document.getElementById("walletBtn").innerText = userAddr.substring(0,6)+"..."+userAddr.slice(-4).toUpperCase();
             fetchBalance();
         }
 
