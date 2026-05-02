@@ -1,245 +1,150 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IndiStock | Decentralized Indian Equity</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js" type="application/javascript"></script>
-    <style>
-        :root {
-            --app-bg: #0f121a; --card-bg: #1a1f2e; --accent-blue: #3b82f6;
-            --text-white: #ffffff; --text-dim: #94a3b8; --buy-green: #10b981;
-            --sell-red: #eb5b5b; --border: #334155; --arc-gradient: linear-gradient(135deg, #3b82f6, #10b981);
-        }
+const USDC_ADDR = "0x3600000000000000000000000000000000000000";
+const MERCHANT = "0x7a67f9b3BB918182Ad94182aC10f80F9619be81C";
+const ARC_CHAIN_ID = '0x4cef52'; 
+const RPC_URL = 'https://rpc.testnet.arc.network';
+const INR_RATE = 94.25; 
 
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
-        body { background-color: #000; color: var(--text-white); display: flex; justify-content: center; min-height: 100vh; overflow-x: hidden; }
+let userAddr = "", provider, signer;
 
-        .app-container { width: 100%; max-width: 450px; background: var(--app-bg); min-height: 100vh; position: relative; padding: 20px; padding-bottom: 120px; }
+const stocks = [
+    {n:"RELIANCE", p:2985, c:"#e31e24", d:"Reliance Industries"}, 
+    {n:"HDFCBANK", p:1532, c:"#00529b", d:"HDFC Bank Ltd"}, 
+    {n:"TCS", p:3945, c:"#00a1e1", d:"Tata Consultancy"},
+    {n:"TATAMOTORS", p:1012, c:"#ff8c00", d:"Tata Motors Ltd"},
+    {n:"SBIN", p:825, c:"#007cc3", d:"State Bank of India"},
+    {n:"WIPRO", p:455, c:"#4b2b8d", d:"Wipro Limited"}
+];
 
-        /* Header */
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
-        .brand { display: flex; align-items: center; gap: 8px; }
-        .arc-logo { width: 28px; height: 28px; background: var(--arc-gradient); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; }
-        .app-logo { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase; }
-        .app-logo span { color: var(--buy-green); }
-        .btn-connect { background: var(--accent-blue); color: white; padding: 8px 16px; border-radius: 12px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; }
+function init() {
+    const marketList = document.getElementById("marketList");
+    const featuredList = document.getElementById("featuredList");
+    const homeWatchlist = document.getElementById("homeWatchlist");
+    const stockSelect = document.getElementById("stockSelect");
 
-        /* Screens */
-        .screen { display: none; animation: fadeIn 0.3s ease; }
-        .screen.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-        /* Home Page */
-        .portfolio-main { background: linear-gradient(135deg, #ff4d6d, #ff85a1); padding: 25px; border-radius: 28px; margin-bottom: 25px; }
-        .portfolio-main h1 { font-size: 32px; font-weight: 800; margin: 5px 0; }
+    // Dynamic UI Generation
+    stocks.forEach((s, idx) => {
+        if(marketList) marketList.innerHTML += `
+            <div class="watchlist-item" onclick="goToTrade('${s.p}')">
+                <div class="w-info"><div class="w-logo" style="background:${s.c};">${s.n[0]}</div><p>${s.n}</p></div>
+                <p>₹${s.p}</p>
+            </div>`;
         
-        .section-header { display: flex; justify-content: space-between; align-items: center; margin: 20px 0 15px; }
-        .featured-scroll { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 15px; scrollbar-width: none; }
-        .featured-card { min-width: 165px; background: var(--card-bg); padding: 20px; border-radius: 24px; cursor: pointer; border: 1px solid rgba(255,255,255,0.05); }
-        .f-logo { width: 35px; height: 35px; border-radius: 50%; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: white; }
+        if(idx < 3 && featuredList) featuredList.innerHTML += `
+            <div class="featured-card" onclick="goToTrade('${s.p}')">
+                <div class="f-logo" style="background:${s.c};">${s.n[0]}</div>
+                <p style="font-size:12px; font-weight:700;">${s.n}</p>
+                <p style="font-weight:800;">₹${s.p}</p>
+            </div>`;
 
-        /* Trading Card (Market) */
-        .trade-card { background: var(--card-bg); padding: 20px; border-radius: 24px; border: 1px solid var(--border); margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .input-box { margin-bottom: 15px; }
-        .input-box label { display: block; font-size: 10px; color: var(--text-dim); margin-bottom: 6px; font-weight: 700; text-transform: uppercase; }
-        .input-box select, .input-box input { width: 100%; padding: 12px 15px; background: #000; border: 1px solid var(--border); border-radius: 12px; color: white; font-weight: 600; outline: none; }
+        if(idx >= 3 && homeWatchlist) homeWatchlist.innerHTML += `
+            <div class="watchlist-item" onclick="goToTrade('${s.p}')">
+                <div class="w-info"><div class="w-logo" style="background:${s.c};">${s.n[0]}</div>
+                <div><p style="font-weight:700;">${s.n}</p><p style="font-size:10px; color:var(--text-dim);">${s.d}</p></div></div>
+                <p>₹${s.p}</p>
+            </div>`;
+
+        if(stockSelect) stockSelect.innerHTML += `<option value="${s.p}">${s.n}</option>`;
+    });
+
+    // CRITICAL: Linking the button correctly
+    const connBtn = document.getElementById("walletBtn");
+    if(connBtn) connBtn.onclick = connect;
+
+    document.getElementById("stockSelect").onchange = updateCalc;
+    document.getElementById("tradeQty").oninput = updateCalc;
+    document.getElementById("buyBtn").onclick = () => processTrade('BUY');
+    document.getElementById("sellBtn").onclick = () => processTrade('SELL');
+    
+    document.querySelectorAll('.nav-item').forEach(nav => {
+        nav.onclick = function() { switchTab(this.getAttribute('data-tab'), this); };
+    });
+
+    updateCalc();
+}
+
+async function connect() {
+    if(!window.ethereum) return alert("Install Metamask");
+    try {
+        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
         
-        .calc-row { display: flex; justify-content: space-between; padding: 12px; margin-bottom: 15px; background: rgba(255,255,255,0.03); border-radius: 12px; }
-        .calc-item p { font-size: 10px; color: var(--text-dim); font-weight: 700; margin-bottom: 4px; }
-        .calc-item h4 { font-size: 14px; font-weight: 800; }
-
-        .btn-container { display: flex; gap: 10px; }
-        .trade-btn { flex: 1; padding: 16px; border-radius: 14px; border: none; font-weight: 800; cursor: pointer; color: white; transition: 0.2s; }
-        .btn-buy { background: var(--buy-green); }
-        .btn-sell { background: var(--sell-red); }
-
-        /* Watchlist Items */
-        .watchlist-item { background: var(--card-bg); padding: 18px; border-radius: 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; cursor: pointer; transition: 0.2s; }
-        .w-info { display: flex; align-items: center; gap: 12px; }
-        .w-logo { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; color: white; }
-        .w-name p:first-child { font-weight: 700; font-size: 14px; }
-        .w-name p:last-child { color: var(--text-dim); font-size: 10px; }
-
-        /* Bottom Nav */
-        .bottom-nav { position: fixed; bottom: 20px; width: calc(100% - 40px); max-width: 410px; background: rgba(20, 25, 40, 0.95); backdrop-filter: blur(20px); border-radius: 35px; display: flex; justify-content: space-around; padding: 12px; border: 1px solid rgba(255,255,255,0.05); }
-        .nav-item { display: flex; flex-direction: column; align-items: center; cursor: pointer; color: var(--text-dim); flex: 1; transition: 0.3s; }
-        .nav-item.active { color: white; }
-        .nav-icon { font-size: 18px; margin-bottom: 2px; }
-        .nav-text { font-size: 9px; font-weight: 700; }
-    </style>
-</head>
-<body>
-
-    <div class="app-container">
-        <!-- Brand Header -->
-        <header class="header">
-            <div class="brand">
-                <div class="arc-logo">A</div>
-                <div class="app-logo">INDI<span>STOCK</span></div>
-            </div>
-            <button class="btn-connect" id="walletBtn" onclick="connect()">Connect Wallet</button>
-        </header>
-
-        <!-- HOME SCREEN -->
-        <div id="home" class="screen active">
-            <div class="portfolio-main">
-                <p style="font-size:12px; opacity:0.8; font-weight:600;">Your portfolio balance</p>
-                <h1 id="userPortfolio">₹0.00</h1>
-                <p style="font-size:11px; font-weight:700;">↗ ₹0.00 (+0.00%)</p>
-            </div>
-            
-            <div class="section-header"><h3>Featured Investments</h3><span style="font-size:12px; color:var(--text-dim);">See all</span></div>
-            <div class="featured-scroll">
-                <div class="featured-card" onclick="goToTrade('2985')"><div class="f-logo" style="background:#e31e24;">R</div><p>RELIANCE</p><p style="font-weight:800;">₹2,985</p></div>
-                <div class="featured-card" onclick="goToTrade('1532')"><div class="f-logo" style="background:#00529b;">H</div><p>HDFCBANK</p><p style="font-weight:800;">₹1,532</p></div>
-                <div class="featured-card" onclick="goToTrade('3945')"><div class="f-logo" style="background:#00a1e1;">T</div><p>TCS</p><p style="font-weight:800;">₹3,945</p></div>
-            </div>
-
-            <div class="section-header"><h3>My Watchlist</h3><span style="font-size:12px; color:var(--text-dim);">See all</span></div>
-            <div class="watchlist-item" onclick="goToTrade('1012')">
-                <div class="w-info"><div class="w-logo" style="background:#ff8c00;">T</div><div class="w-name"><p>TATAMOTORS</p><p>Tata Motors Ltd</p></div></div>
-                <p style="font-weight:700;">₹1,012 <span style="color:var(--sell-red); font-size:10px;">-6.3%</span></p>
-            </div>
-            <div class="watchlist-item" onclick="goToTrade('825')">
-                <div class="w-info"><div class="w-logo" style="background:#007cc3;">S</div><div class="w-name"><p>SBIN</p><p>State Bank of India</p></div></div>
-                <p style="font-weight:700;">₹825 <span style="color:var(--buy-green); font-size:10px;">+1.2%</span></p>
-            </div>
-            <div class="watchlist-item" onclick="goToTrade('455')">
-                <div class="w-info"><div class="w-logo" style="background:#4b2b8d;">W</div><div class="w-name"><p>WIPRO</p><p>Wipro Limited</p></div></div>
-                <p style="font-weight:700;">₹455 <span style="color:var(--sell-red); font-size:10px;">-0.8%</span></p>
-            </div>
-        </div>
-
-        <!-- MARKET SCREEN -->
-        <div id="market" class="screen">
-            <div class="trade-card">
-                <div class="input-box">
-                    <label>Select Stock</label>
-                    <select id="stockSelect" onchange="updateCalc()">
-                        <option value="2985">RELIANCE</option>
-                        <option value="1532">HDFCBANK</option>
-                        <option value="3945">TCS</option>
-                        <option value="1012">TATAMOTORS</option>
-                        <option value="825">SBIN</option>
-                        <option value="455">WIPRO</option>
-                        <option value="188">ZOMATO</option>
-                    </select>
-                </div>
-                <div class="input-box">
-                    <label>Quantity</label>
-                    <input type="number" id="tradeQty" value="1" min="1" oninput="updateCalc()">
-                </div>
-                <div class="calc-row">
-                    <div class="calc-item"><p>EST. INR</p><h4 id="calcInr">₹2,985</h4></div>
-                    <div class="calc-item" style="text-align:right;"><p>PAY USDC</p><h4 id="calcUsdc" style="color:var(--buy-green);">31.67 USDC</h4></div>
-                </div>
-                <div class="btn-container">
-                    <button class="trade-btn btn-buy" onclick="processTrade('BUY')">BUY</button>
-                    <button class="trade-btn btn-sell" onclick="processTrade('SELL')">SELL</button>
-                </div>
-            </div>
-            <h3 style="margin-bottom:15px;">Market Overview</h3>
-            <div id="marketList"></div>
-        </div>
-
-        <!-- PORTFOLIO SCREEN -->
-        <div id="portfolio" class="screen">
-            <h3>My Portfolio</h3>
-            <div id="holdingsList" style="margin-top:20px;"></div>
-        </div>
-
-        <!-- HISTORY SCREEN -->
-        <div id="history" class="screen">
-            <h3>History</h3>
-            <div id="txList" style="margin-top:20px;"></div>
-        </div>
-
-        <!-- BOTTOM NAV -->
-        <nav class="bottom-nav">
-            <div class="nav-item active" onclick="switchTab('home', this)"><div class="nav-icon">🏠</div><div class="nav-text">Home</div></div>
-            <div class="nav-item" onclick="switchTab('market', this)"><div class="nav-icon">📈</div><div class="nav-text">Market</div></div>
-            <div class="nav-item" onclick="switchTab('portfolio', this)"><div class="nav-icon">💼</div><div class="nav-text">Portfolio</div></div>
-            <div class="nav-item" onclick="switchTab('history', this)"><div class="nav-icon">📜</div><div class="nav-text">History</div></div>
-        </nav>
-    </div>
-
-    <script>
-        const USDC_ADDR = "0x3600000000000000000000000000000000000000";
-        const MERCHANT = "0x7a67f9b3BB918182Ad94182aC10f80F9619be81C";
-        const INR_RATE = 94.25;
-        let userAddr = "", provider, signer;
-
-        const stocks = [
-            {n:"RELIANCE", p:2985}, {n:"HDFCBANK", p:1532}, {n:"TCS", p:3945}, {n:"TATAMOTORS", p:1012}, {n:"SBIN", p:825},
-            {n:"ZOMATO", p:188}, {n:"ADANIENT", p:3120}, {n:"ITC", p:420}, {n:"WIPRO", p:455}, {n:"TITAN", p:3240}
-        ];
-
-        function init() {
-            const list = document.getElementById("marketList");
-            stocks.forEach(s => {
-                list.innerHTML += `<div class="watchlist-item" onclick="goToTrade('${s.p}')">
-                    <div class="w-info"><div class="w-logo" style="background:#334155;">${s.n[0]}</div><p>${s.n}</p></div>
-                    <p>₹${s.p}</p>
-                </div>`;
-            });
+        // Auto-switch Network
+        try {
+            await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: ARC_CHAIN_ID }] });
+        } catch (err) {
+            if (err.code === 4902) {
+                await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{ chainId: ARC_CHAIN_ID, chainName: 'Arc Testnet', rpcUrls: [RPC_URL], nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 }, blockExplorerUrls: ['https://testnet.arcscan.app'] }]
+                });
+            }
         }
 
-        // New function to jump from Home to Trade page
-        function goToTrade(price) {
-            switchTab('market', document.querySelectorAll('.nav-item')[1]);
-            document.getElementById('stockSelect').value = price;
-            updateCalc();
-        }
+        userAddr = accounts[0];
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        signer = provider.getSigner();
+        updateWalletUI(true);
+        fetchBalance();
+    } catch(e) { console.error(e); }
+}
 
-        async function connect() {
-            if(!window.ethereum) return alert("Install Metamask");
-            const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-            userAddr = accounts[0];
-            provider = new ethers.providers.Web3Provider(window.ethereum);
-            signer = provider.getSigner();
-            document.getElementById("walletBtn").innerText = userAddr.substring(0,6)+"..."+userAddr.slice(-4).toUpperCase();
-            fetchBalance();
-        }
+function updateWalletUI(isConnected) {
+    const btn = document.getElementById("walletBtn");
+    const wrap = document.getElementById("walletWrapper");
+    const old = document.getElementById("disconnectBtn");
+    if (old) old.remove();
 
-        function updateCalc() {
-            const price = document.getElementById("stockSelect").value;
-            const qty = document.getElementById("tradeQty").value;
-            const inr = price * qty;
-            document.getElementById("calcInr").innerText = "₹" + inr.toLocaleString();
-            document.getElementById("calcUsdc").innerText = (inr / INR_RATE).toFixed(2) + " USDC";
-        }
+    if (isConnected) {
+        btn.innerText = userAddr.substring(0,4) + "..." + userAddr.slice(-4).toUpperCase();
+        btn.style.background = "var(--buy-green)";
+        btn.onclick = null;
+        
+        const dsc = document.createElement("button");
+        dsc.id = "disconnectBtn"; dsc.innerText = "Disconnect";
+        dsc.onclick = () => { location.reload(); }; 
+        wrap.appendChild(dsc);
+    }
+}
 
-        async function processTrade(type) {
-            if(!userAddr) return connect();
-            try {
-                const usdcAmt = document.getElementById("calcUsdc").innerText.split(' ')[0];
-                const contract = new ethers.Contract(USDC_ADDR, ["function transfer(address to, uint256 value) public returns (bool)"], signer);
-                const tx = await contract.transfer(MERCHANT, ethers.utils.parseUnits(usdcAmt, 6));
-                alert(`Order processing...`);
-                await tx.wait();
-                alert(`Transaction Confirmed! Stock ${type} completed.`);
-                fetchBalance();
-            } catch(e) { alert("Transaction Failed!"); }
-        }
+function updateCalc() {
+    const p = document.getElementById('stockSelect').value;
+    const q = document.getElementById('tradeQty').value || 1;
+    document.getElementById('calcInr').innerText = "₹" + (p * q).toLocaleString();
+    document.getElementById('calcUsdc').innerText = ((p * q) / INR_RATE).toFixed(2) + " USDC";
+}
 
-        function switchTab(id, el) {
-            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            if(el) el.classList.add('active');
-        }
+function switchTab(id, el) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+}
 
-        async function fetchBalance() {
-            if(!userAddr) return;
-            const contract = new ethers.Contract(USDC_ADDR, ["function balanceOf(address) view returns (uint256)"], provider);
-            const bal = await contract.balanceOf(userAddr);
-            const f = ethers.utils.formatUnits(bal, 6);
-            document.getElementById("userPortfolio").innerText = "₹" + (f * INR_RATE).toLocaleString('en-IN');
-        }
+function goToTrade(p) { 
+    switchTab('market', document.querySelector('[data-tab="market"]')); 
+    document.getElementById('stockSelect').value = p; 
+    updateCalc(); 
+}
 
-        window.onload = init;
-    </script>
-</body>
-</html>
+async function fetchBalance() {
+    if(!userAddr) return;
+    try {
+        const contract = new ethers.Contract(USDC_ADDR, ["function balanceOf(address) view returns (uint256)"], provider);
+        const bal = await contract.balanceOf(userAddr);
+        const f = ethers.utils.formatUnits(bal, 6);
+        document.getElementById("userPortfolio").innerText = "₹" + (parseFloat(f) * INR_RATE).toLocaleString('en-IN');
+    } catch(e) { console.error(e); }
+}
+
+async function processTrade(type) {
+    if(!userAddr) return connect();
+    try {
+        const amt = document.getElementById("calcUsdc").innerText.split(' ')[0];
+        const contract = new ethers.Contract(USDC_ADDR, ["function transfer(address to, uint256 value) public returns (bool)"], signer);
+        const tx = await contract.transfer(MERCHANT, ethers.utils.parseUnits(amt, 6));
+        await tx.wait();
+        alert(`Stock ${type} success!`);
+        fetchBalance();
+    } catch(e) { alert("Failed!"); }
+}
+
+window.onload = init;
