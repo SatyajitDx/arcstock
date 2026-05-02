@@ -31,7 +31,7 @@
         .screen.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* Home Page Components */
+        /* Home Page */
         .portfolio-main { background: linear-gradient(135deg, #ff4d6d, #ff85a1); padding: 25px; border-radius: 28px; margin-bottom: 25px; }
         .portfolio-main h1 { font-size: 32px; font-weight: 800; margin: 5px 0; }
         
@@ -92,22 +92,21 @@
             
             <div class="section-header"><h3>Featured Investments</h3><span style="font-size:12px; color:var(--text-dim);">See all</span></div>
             <div class="featured-scroll">
-                <div class="featured-card" onclick="switchTab('market')"><div class="f-logo" style="background:#e31e24;">R</div><p>RELIANCE</p><p style="font-weight:800;">₹2,985</p></div>
-                <div class="featured-card" onclick="switchTab('market')"><div class="f-logo" style="background:#00529b;">H</div><p>HDFCBANK</p><p style="font-weight:800;">₹1,532</p></div>
-                <div class="featured-card" onclick="switchTab('market')"><div class="f-logo" style="background:#00a1e1;">T</div><p>TCS</p><p style="font-weight:800;">₹3,945</p></div>
+                <div class="featured-card" onclick="goToTrade('2985')"><div class="f-logo" style="background:#e31e24;">R</div><p>RELIANCE</p><p style="font-weight:800;">₹2,985</p></div>
+                <div class="featured-card" onclick="goToTrade('1532')"><div class="f-logo" style="background:#00529b;">H</div><p>HDFCBANK</p><p style="font-weight:800;">₹1,532</p></div>
+                <div class="featured-card" onclick="goToTrade('3945')"><div class="f-logo" style="background:#00a1e1;">T</div><p>TCS</p><p style="font-weight:800;">₹3,945</p></div>
             </div>
 
             <div class="section-header"><h3>My Watchlist</h3><span style="font-size:12px; color:var(--text-dim);">See all</span></div>
-            <!-- Corrected Watchlist -->
-            <div class="watchlist-item" onclick="switchTab('market')">
+            <div class="watchlist-item" onclick="goToTrade('1012')">
                 <div class="w-info"><div class="w-logo" style="background:#ff8c00;">T</div><div class="w-name"><p>TATAMOTORS</p><p>Tata Motors Ltd</p></div></div>
                 <p style="font-weight:700;">₹1,012 <span style="color:var(--sell-red); font-size:10px;">-6.3%</span></p>
             </div>
-            <div class="watchlist-item" onclick="switchTab('market')">
+            <div class="watchlist-item" onclick="goToTrade('825')">
                 <div class="w-info"><div class="w-logo" style="background:#007cc3;">S</div><div class="w-name"><p>SBIN</p><p>State Bank of India</p></div></div>
                 <p style="font-weight:700;">₹825 <span style="color:var(--buy-green); font-size:10px;">+1.2%</span></p>
             </div>
-            <div class="watchlist-item" onclick="switchTab('market')">
+            <div class="watchlist-item" onclick="goToTrade('455')">
                 <div class="w-info"><div class="w-logo" style="background:#4b2b8d;">W</div><div class="w-name"><p>WIPRO</p><p>Wipro Limited</p></div></div>
                 <p style="font-weight:700;">₹455 <span style="color:var(--sell-red); font-size:10px;">-0.8%</span></p>
             </div>
@@ -122,7 +121,9 @@
                         <option value="2985">RELIANCE</option>
                         <option value="1532">HDFCBANK</option>
                         <option value="3945">TCS</option>
+                        <option value="1012">TATAMOTORS</option>
                         <option value="825">SBIN</option>
+                        <option value="455">WIPRO</option>
                         <option value="188">ZOMATO</option>
                     </select>
                 </div>
@@ -171,18 +172,25 @@
         let userAddr = "", provider, signer;
 
         const stocks = [
-            {n:"RELIANCE", p:2985}, {n:"HDFCBANK", p:1532}, {n:"TCS", p:3945}, {n:"INFY", p:1420}, {n:"SBIN", p:825},
+            {n:"RELIANCE", p:2985}, {n:"HDFCBANK", p:1532}, {n:"TCS", p:3945}, {n:"TATAMOTORS", p:1012}, {n:"SBIN", p:825},
             {n:"ZOMATO", p:188}, {n:"ADANIENT", p:3120}, {n:"ITC", p:420}, {n:"WIPRO", p:455}, {n:"TITAN", p:3240}
         ];
 
         function init() {
             const list = document.getElementById("marketList");
             stocks.forEach(s => {
-                list.innerHTML += `<div class="watchlist-item">
+                list.innerHTML += `<div class="watchlist-item" onclick="goToTrade('${s.p}')">
                     <div class="w-info"><div class="w-logo" style="background:#334155;">${s.n[0]}</div><p>${s.n}</p></div>
                     <p>₹${s.p}</p>
                 </div>`;
             });
+        }
+
+        // New function to jump from Home to Trade page
+        function goToTrade(price) {
+            switchTab('market', document.querySelectorAll('.nav-item')[1]);
+            document.getElementById('stockSelect').value = price;
+            updateCalc();
         }
 
         async function connect() {
