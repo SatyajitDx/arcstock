@@ -1,3 +1,24 @@
+const ETHERS_CDN = "https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js";
+
+function loadEthers() {
+    return new Promise((resolve, reject) => {
+        if (window.ethers) {
+            resolve();
+            return;
+        }
+
+        const script = document.createElement("script");
+        script.src = ETHERS_CDN;
+        script.async = true;
+
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("Ethers library failed to load"));
+
+        document.head.appendChild(script);
+    });
+}
+
+// --- CONFIGURATION ---
 const USDC_ADDR = "0x3600000000000000000000000000000000000000";
 const MERCHANT_ADDRESS = "0x7a67f9b3BB918182Ad94182aC10f80F9619be81C";
 const ARC_CHAIN_ID = "0x4cef52";
@@ -25,35 +46,42 @@ let holdings = JSON.parse(localStorage.getItem("indistockHoldings")) || {};
 let history = JSON.parse(localStorage.getItem("indistockHistory")) || [];
 
 window.addEventListener("load", async () => {
-    initMarket();
-    updateCalc();
-    renderHoldings();
-    renderHistory();
+    try {
+        await loadEthers();
 
-    if (window.ethereum && localStorage.getItem("isWalletConnected") === "true") {
-        try {
-            const accounts = await window.ethereum.request({ method: "eth_accounts" });
-            if (accounts.length > 0) {
-                await setupWallet(accounts[0], false);
+        initMarket();
+        updateCalc();
+        renderHoldings();
+        renderHistory();
+
+        if (window.ethereum && localStorage.getItem("isWalletConnected") === "true") {
+            try {
+                const accounts = await window.ethereum.request({ method: "eth_accounts" });
+                if (accounts.length > 0) {
+                    await setupWallet(accounts[0], false);
+                }
+            } catch (error) {
+                console.error("Auto wallet restore failed:", error);
             }
-        } catch (error) {
-            console.error("Auto wallet restore failed:", error);
         }
-    }
 
-    if (window.ethereum) {
-        window.ethereum.on("accountsChanged", async (accounts) => {
-            if (!accounts || accounts.length === 0) {
-                disconnectWalletUI();
-                return;
-            }
+        if (window.ethereum) {
+            window.ethereum.on("accountsChanged", async (accounts) => {
+                if (!accounts || accounts.length === 0) {
+                    disconnectWalletUI();
+                    return;
+                }
 
-            await setupWallet(accounts[0], false);
-        });
+                await setupWallet(accounts[0], false);
+            });
 
-        window.ethereum.on("chainChanged", () => {
-            window.location.reload();
-        });
+            window.ethereum.on("chainChanged", () => {
+                window.location.reload();
+            });
+        }
+    } catch (error) {
+        console.error(error);
+        showValidationError(error.message || "App failed to load");
     }
 });
 
@@ -91,13 +119,15 @@ function getRandomChange() {
 }
 
 async function connectWallet() {
-    if (!window.ethereum) {
-        const currentUrl = window.location.href.replace(/https?:\/\//, "");
-        window.location.href = "https://metamask.app.link/dapp/" + currentUrl;
-        return;
-    }
-
     try {
+        await loadEthers();
+
+        if (!window.ethereum) {
+            const currentUrl = window.location.href.replace(/https?:\/\//, "");
+            window.location.href = "https://metamask.app.link/dapp/" + currentUrl;
+            return;
+        }
+
         const accounts = await window.ethereum.request({
             method: "eth_requestAccounts"
         });
@@ -155,6 +185,8 @@ async function addOrSwitchArcChain() {
 }
 
 async function setupWallet(address, shouldSave) {
+    await loadEthers();
+
     userAddress = address;
     provider = new ethers.providers.Web3Provider(window.ethereum);
     signer = provider.getSigner();
@@ -245,6 +277,8 @@ async function processTrade(type) {
 
 async function buyStock(stock, qty, inrAmount, usdcAmount) {
     try {
+        await loadEthers();
+
         const confirmed = confirm(`Buy ${qty} ${stock.n} for ${usdcAmount.toFixed(2)} USDC?`);
         if (!confirmed) return;
 
@@ -330,6 +364,8 @@ async function fetchBalance() {
     if (!userAddress || !provider) return;
 
     try {
+        await loadEthers();
+
         const usdcContract = new ethers.Contract(
             USDC_ADDR,
             ["function balanceOf(address account) view returns (uint256)"],
