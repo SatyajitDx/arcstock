@@ -18,7 +18,6 @@ function loadEthers() {
     });
 }
 
-// --- CONFIGURATION ---
 const USDC_ADDR = "0x3600000000000000000000000000000000000000";
 const MERCHANT_ADDRESS = "0x589c5c0C9ce60ce6624480b9E9770b61A8934a8a";
 const ARC_CHAIN_ID = "0x4cef52";
@@ -29,6 +28,7 @@ let userAddress = "";
 let provider;
 let signer;
 let pendingTrade = null;
+let appWalletUsdcBalance = Number(localStorage.getItem("appWalletUsdcBalance")) || 0;
 
 const stocks = [
     { n: "RELIANCE", p: 2985, c: "#e31e24" },
@@ -55,6 +55,7 @@ window.addEventListener("load", async () => {
         renderHoldings();
         renderHistory();
         updatePortfolioValue();
+        updateAppWalletBalance();
 
         if (window.ethereum && localStorage.getItem("isWalletConnected") === "true") {
             try {
@@ -204,6 +205,7 @@ async function setupWallet(address, shouldSave) {
     }
 
     updatePortfolioValue();
+    updateAppWalletBalance();
 }
 
 function disconnectWalletUI() {
@@ -218,6 +220,7 @@ function disconnectWalletUI() {
     }
 
     updatePortfolioValue();
+    updateAppWalletBalance();
     localStorage.removeItem("isWalletConnected");
 }
 
@@ -379,30 +382,16 @@ async function executeSellStock(stock, qty, inrAmount, usdcAmount) {
             return;
         }
 
-        const response = await fetch("/api/sell", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                userAddress,
-                usdcAmount: usdcAmount.toFixed(6)
-            })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || "Sell payout failed");
-        }
-
         holdings[stock.n] -= qty;
 
         if (holdings[stock.n] <= 0) {
             delete holdings[stock.n];
         }
 
+        appWalletUsdcBalance += usdcAmount;
+
         saveHoldings();
+        saveAppWallet();
 
         addHistory({
             type: "SELL",
@@ -410,13 +399,14 @@ async function executeSellStock(stock, qty, inrAmount, usdcAmount) {
             qty,
             inrAmount,
             usdcAmount,
-            txHash: data.txHash,
+            txHash: "APP_WALLET_CREDIT",
             date: new Date().toLocaleString()
         });
 
         renderHoldings();
         renderHistory();
         updatePortfolioValue();
+        updateAppWalletBalance();
 
         showTradeSuccess("SELL", stock, qty, usdcAmount);
     } catch (error) {
@@ -485,6 +475,189 @@ function saveHoldings() {
     localStorage.setItem("indistockHoldings", JSON.stringify(holdings));
 }
 
+function saveAppWallet() {
+    localStorage.setItem("appWalletUsdcBalance", String(appWalletUsdcBalance));
+}
+
+function updateAppWalletBalance() {
+    const walletInrEl = document.getElementById("appWalletInr");
+    const walletUsdcEl = document.getElementById("appWalletUsdc");
+    const homeWalletEl = document.getElementById("walletBalanceText");
+
+    const inrValue = appWalletUsdcBalance * INR_RATE;
+
+    if (walletInrEl) {
+        walletInrEl.innerText =
+            "₹" + inrValue.toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+    }
+
+    if (walletUsdcEl) {
+        walletUsdcEl.innerText = appWalletUsdcBalance.toFixed(2) + " USDC";
+    }
+
+    if (homeWalletEl) {
+        homeWalletEl.innerText =
+            "Wallet: ₹" + inrValue.toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }) + " (" + appWalletUsdcBalance.toFixed(2) + " USDC)";
+    }
+}
+
+function switchWalletPanel(panel) {
+    const depositPanel = document.getElementById("depositPanel");
+    const withdrawPanel = document.getElementById("withdrawPanel");
+    const depositBtn = document.getElementById("depositTabBtn");
+    const withdrawBtn = document.getElementById("withdrawTabBtn");
+
+    if (!depositPanel || !withdrawPanel || !depositBtn || !withdrawBtn) return;
+
+    depositPanel.classList.toggle("active", panel === "deposit");
+    withdrawPanel.classList.toggle("active", panel === "withdraw");
+
+    depositBtn.classList.toggle("active", panel === "deposit");
+    withdrawBtn.classList.toggle("active", panel === "withdraw");
+}
+
+function depositDemo() {
+    const amount = Number(document.getElementById("depositUsdcAmount").value || 0);
+
+    if (!amount || amount <= 0) {
+        showValidationError("Enter valid USDC amount");
+        return;
+    }
+
+    appWalletUsdcBalance += amount;
+    saveAppWallet();
+
+    addHistory({
+        type: "DEPOSIT",
+        stock: "APP WALLET",
+        qty: 1,
+        inrAmount: amount * INR_RATE,
+        usdcAmount: amount,
+        txHash: "DEMO_DEPOSIT",
+        date: new Date().toLocaleString()
+    });
+
+    document.getElementById("depositUsdcAmount").value = "";
+
+    renderHistory();
+    updateAppWalletBalance();
+    showValidationError(`Deposit successful: ${amount.toFixed(2)} USDC`);
+}
+
+async function withdrawUsdc() {
+    try {
+        if (!userAddress) {
+            await connectWallet();
+            if (!userAddress) return;
+        }
+
+        const amount = Number(document.getElementById("withdrawUsdcAmount").value || 0);
+
+        if (!amount || amount <= 0) {
+            showValidationError("Enter valid USDC amount");
+            return;
+        }
+
+        if (amount > appWalletUsdcBalance) {
+            showValidationError("Insufficient wallet balance");
+            return;
+        }
+
+        const response = await fetch("/api/withdraw-usdc", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                userAddress,
+                usdcAmount: amount.toFixed(6)
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "USDC withdraw failed");
+        }
+
+        appWalletUsdcBalance -= amount;
+        saveAppWallet();
+
+        addHistory({
+            type: "USDC WITHDRAW",
+            stock: "ARC WALLET",
+            qty: 1,
+            inrAmount: amount * INR_RATE,
+            usdcAmount: amount,
+            txHash: data.txHash,
+            date: new Date().toLocaleString()
+        });
+
+        document.getElementById("withdrawUsdcAmount").value = "";
+
+        renderHistory();
+        updateAppWalletBalance();
+        showValidationError(`USDC withdraw successful: ${amount.toFixed(2)} USDC`);
+    } catch (error) {
+        console.error("USDC withdraw failed:", error);
+        showValidationError(error.message || "USDC withdraw failed");
+    }
+}
+
+function withdrawToBank() {
+    const bankName = document.getElementById("bankName").value;
+    const fullName = document.getElementById("bankFullName").value.trim();
+    const accountNumber = document.getElementById("bankAccountNumber").value.trim();
+    const ifsc = document.getElementById("bankIfsc").value.trim().toUpperCase();
+    const inrAmount = Number(document.getElementById("bankInrAmount").value || 0);
+    const usdcAmount = inrAmount / INR_RATE;
+
+    if (!bankName || !fullName || !accountNumber || !ifsc || !inrAmount) {
+        showValidationError("Please fill all bank details");
+        return;
+    }
+
+    if (inrAmount <= 0) {
+        showValidationError("Enter valid INR amount");
+        return;
+    }
+
+    if (usdcAmount > appWalletUsdcBalance) {
+        showValidationError("Insufficient wallet balance");
+        return;
+    }
+
+    appWalletUsdcBalance -= usdcAmount;
+    saveAppWallet();
+
+    addHistory({
+        type: "BANK WITHDRAW",
+        stock: bankName,
+        qty: 1,
+        inrAmount,
+        usdcAmount,
+        txHash: "DEMO_BANK_WITHDRAW",
+        date: new Date().toLocaleString()
+    });
+
+    document.getElementById("bankName").value = "";
+    document.getElementById("bankFullName").value = "";
+    document.getElementById("bankAccountNumber").value = "";
+    document.getElementById("bankIfsc").value = "";
+    document.getElementById("bankInrAmount").value = "";
+
+    renderHistory();
+    updateAppWalletBalance();
+
+    showValidationError(`Bank withdrawal successful: ₹${inrAmount.toLocaleString("en-IN")}`);
+}
+
 function renderHoldings() {
     const list = document.getElementById("holdingsList");
     if (!list) return;
@@ -536,9 +709,22 @@ function renderHistory() {
     list.innerHTML = "";
 
     history.forEach((tx) => {
-        const color = tx.type === "BUY" ? "var(--buy-green)" : "var(--sell-red)";
-        const hasRealTx = tx.txHash && tx.txHash !== "LOCAL_SELL_ORDER";
+        const color = tx.type.includes("BUY") || tx.type.includes("DEPOSIT") ? "var(--buy-green)" : "var(--sell-red)";
+        const hasRealTx =
+            tx.txHash &&
+            !["LOCAL_SELL_ORDER", "APP_WALLET_CREDIT", "DEMO_BANK_WITHDRAW", "DEMO_DEPOSIT"].includes(tx.txHash);
+
         const explorerUrl = `https://testnet.arcscan.app/tx/${tx.txHash}`;
+
+        const statusText = hasRealTx
+            ? "View on Arcscan"
+            : tx.txHash === "APP_WALLET_CREDIT"
+                ? "Credited to app wallet"
+                : tx.txHash === "DEMO_BANK_WITHDRAW"
+                    ? "Bank withdrawal success"
+                    : tx.txHash === "DEMO_DEPOSIT"
+                        ? "Demo deposit"
+                        : "App wallet entry";
 
         list.innerHTML += `
             <div class="watchlist-item" ${hasRealTx ? `onclick="window.open('${explorerUrl}', '_blank')"` : ""}>
@@ -546,7 +732,7 @@ function renderHistory() {
                     <p style="font-weight:800; color:${color};">${tx.type} ${tx.stock}</p>
                     <p style="font-size:11px; color:var(--text-dim);">${tx.qty} ${tx.qty === 1 ? "share" : "shares"} • ${tx.date}</p>
                     <p style="font-size:10px; color:${hasRealTx ? "var(--accent-blue)" : "var(--text-dim)"};">
-                        ${hasRealTx ? "View on Arcscan" : "Local sell order"}
+                        ${statusText}
                     </p>
                 </div>
                 <div style="text-align:right;">
