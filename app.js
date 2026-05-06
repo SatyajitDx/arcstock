@@ -20,7 +20,7 @@ function loadEthers() {
 
 // --- CONFIGURATION ---
 const USDC_ADDR = "0x3600000000000000000000000000000000000000";
-const MERCHANT_ADDRESS = "0x7a67f9b3BB918182Ad94182aC10f80F9619be81C";
+const MERCHANT_ADDRESS = "0x589c5c0C9ce60ce6624480b9E9770b61A8934a8a";
 const ARC_CHAIN_ID = "0x4cef52";
 const RPC_URL = "https://rpc.testnet.arc.network";
 const INR_RATE = 94.25;
