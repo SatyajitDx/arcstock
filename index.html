@@ -1,309 +1,464 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IndiStock | Decentralized Indian Equity</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js" type="application/javascript"></script>
-    <style>
-        :root {
-            --app-bg: #0f121a; --card-bg: #1a1f2e; --accent-blue: #3b82f6;
-            --text-white: #ffffff; --text-dim: #94a3b8; --buy-green: #10b981;
-            --sell-red: #eb5b5b; --border: #334155; --arc-gradient: linear-gradient(135deg, #3b82f6, #10b981);
-        }
+<script>
+    // --- CONFIGURATION ---
+    const USDC_ADDR = "0x3600000000000000000000000000000000000000";
+    const MERCHANT_ADDRESS = "0x7a67f9b3BB918182Ad94182aC10f80F9619be81C";
+    const ARC_CHAIN_ID = "0x4cef52";
+    const RPC_URL = "https://rpc.testnet.arc.network";
+    const INR_RATE = 94.25;
 
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
-        body { background-color: #000; color: var(--text-white); display: flex; justify-content: center; min-height: 100vh; overflow-x: hidden; }
+    let userAddress = "";
+    let provider;
+    let signer;
 
-        .app-container { width: 100%; max-width: 450px; background: var(--app-bg); min-height: 100vh; position: relative; padding: 20px; padding-bottom: 120px; }
+    const stocks = [
+        { n: "RELIANCE", p: 2985, c: "#e31e24" },
+        { n: "HDFCBANK", p: 1532, c: "#00529b" },
+        { n: "TCS", p: 3945, c: "#00a1e1" },
+        { n: "TATAMOTORS", p: 1012, c: "#ff8c00" },
+        { n: "SBIN", p: 825, c: "#007cc3" },
+        { n: "ZOMATO", p: 188, c: "#e23744" },
+        { n: "ADANIENT", p: 3120, c: "#334155" },
+        { n: "ITC", p: 420, c: "#0f766e" },
+        { n: "WIPRO", p: 455, c: "#4b2b8d" },
+        { n: "TITAN", p: 3240, c: "#b45309" }
+    ];
 
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
-        .brand { display: flex; align-items: center; gap: 8px; }
-        .arc-logo { width: 28px; height: 28px; background: var(--arc-gradient); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; }
-        .app-logo { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; text-transform: uppercase; }
-        .app-logo span { color: var(--buy-green); }
+    let holdings = JSON.parse(localStorage.getItem("indistockHoldings")) || {};
+    let history = JSON.parse(localStorage.getItem("indistockHistory")) || [];
 
-        .btn-connect { background: var(--accent-blue); color: white; padding: 8px 16px; border-radius: 12px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.3s; }
-        .btn-connected { background: var(--buy-green) !important; }
+    // --- INITIALIZE ON LOAD ---
+    window.addEventListener("load", async () => {
+        initMarket();
+        updateCalc();
+        renderHoldings();
+        renderHistory();
 
-        .screen { display: none; animation: fadeIn 0.3s ease; }
-        .screen.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-        .portfolio-main { background: linear-gradient(135deg, #ff4d6d, #ff85a1); padding: 25px; border-radius: 28px; margin-bottom: 25px; }
-        .portfolio-main h1 { font-size: 32px; font-weight: 800; margin: 5px 0; }
-
-        .section-header { display: flex; justify-content: space-between; align-items: center; margin: 20px 0 15px; }
-        .featured-scroll { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 15px; scrollbar-width: none; }
-        .featured-card { min-width: 165px; background: var(--card-bg); padding: 20px; border-radius: 24px; cursor: pointer; border: 1px solid rgba(255,255,255,0.05); }
-        .f-logo { width: 35px; height: 35px; border-radius: 50%; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: white; }
-
-        .trade-card { background: var(--card-bg); padding: 20px; border-radius: 24px; border: 1px solid var(--border); margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .input-box { margin-bottom: 15px; }
-        .input-box label { display: block; font-size: 10px; color: var(--text-dim); margin-bottom: 6px; font-weight: 700; text-transform: uppercase; }
-        .input-box select, .input-box input { width: 100%; padding: 12px 15px; background: #000; border: 1px solid var(--border); border-radius: 12px; color: white; font-weight: 600; outline: none; }
-
-        .calc-row { display: flex; justify-content: space-between; padding: 12px; margin-bottom: 15px; background: rgba(255,255,255,0.03); border-radius: 12px; }
-        .calc-item p { font-size: 10px; color: var(--text-dim); font-weight: 700; margin-bottom: 4px; }
-        .calc-item h4 { font-size: 14px; font-weight: 800; }
-
-        .btn-container { display: flex; gap: 10px; }
-        .trade-btn { flex: 1; padding: 16px; border-radius: 14px; border: none; font-weight: 800; cursor: pointer; color: white; transition: 0.2s; }
-        .btn-buy { background: var(--buy-green); }
-        .btn-sell { background: var(--sell-red); }
-
-        .watchlist-item { background: var(--card-bg); padding: 18px; border-radius: 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; cursor: pointer; transition: 0.2s; }
-        .w-info { display: flex; align-items: center; gap: 12px; }
-        .w-logo { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; color: white; }
-
-        .bottom-nav { position: fixed; bottom: 20px; width: calc(100% - 40px); max-width: 410px; background: rgba(20, 25, 40, 0.95); backdrop-filter: blur(20px); border-radius: 35px; display: flex; justify-content: space-around; padding: 12px; border: 1px solid rgba(255,255,255,0.05); }
-        .nav-item { display: flex; flex-direction: column; align-items: center; cursor: pointer; color: var(--text-dim); flex: 1; transition: 0.3s; }
-        .nav-item.active { color: white; }
-        .nav-icon { font-size: 18px; margin-bottom: 2px; }
-        .nav-text { font-size: 9px; font-weight: 700; }
-    </style>
-</head>
-<body>
-    <div class="app-container">
-        <header class="header">
-            <div class="brand">
-                <div class="arc-logo">A</div>
-                <div class="app-logo">INDI<span>STOCK</span></div>
-            </div>
-            <button class="btn-connect" id="walletBtn" onclick="connect()">Connect Wallet</button>
-        </header>
-
-        <div id="home" class="screen active">
-            <div class="portfolio-main">
-                <p style="font-size:12px; opacity:0.8; font-weight:600;">Your portfolio balance</p>
-                <h1 id="userPortfolio">₹0.00</h1>
-                <p style="font-size:11px; font-weight:700;">↗ ₹0.00 (+0.00%)</p>
-            </div>
-
-            <div class="section-header"><h3>Featured Investments</h3><span style="font-size:12px; color:var(--text-dim);">See all</span></div>
-            <div class="featured-scroll">
-                <div class="featured-card" onclick="goToTrade('2985')"><div class="f-logo" style="background:#e31e24;">R</div><p>RELIANCE</p><p style="font-weight:800;">₹2,985</p></div>
-                <div class="featured-card" onclick="goToTrade('1532')"><div class="f-logo" style="background:#00529b;">H</div><p>HDFCBANK</p><p style="font-weight:800;">₹1,532</p></div>
-                <div class="featured-card" onclick="goToTrade('3945')"><div class="f-logo" style="background:#00a1e1;">T</div><p>TCS</p><p style="font-weight:800;">₹3,945</p></div>
-            </div>
-
-            <div class="section-header"><h3>My Watchlist</h3><span style="font-size:12px; color:var(--text-dim);">See all</span></div>
-            <div class="watchlist-item" onclick="goToTrade('1012')">
-                <div class="w-info"><div class="w-logo" style="background:#ff8c00;">T</div><div class="w-name"><p>TATAMOTORS</p><p>Tata Motors Ltd</p></div></div>
-                <p style="font-weight:700;">₹1,012 <span style="color:var(--sell-red); font-size:10px;">-6.3%</span></p>
-            </div>
-            <div class="watchlist-item" onclick="goToTrade('825')">
-                <div class="w-info"><div class="w-logo" style="background:#007cc3;">S</div><div class="w-name"><p>SBIN</p><p>State Bank of India</p></div></div>
-                <p style="font-weight:700;">₹825 <span style="color:var(--buy-green); font-size:10px;">+1.2%</span></p>
-            </div>
-            <div class="watchlist-item" onclick="goToTrade('455')">
-                <div class="w-info"><div class="w-logo" style="background:#4b2b8d;">W</div><div class="w-name"><p>WIPRO</p><p>Wipro Limited</p></div></div>
-                <p style="font-weight:700;">₹455 <span style="color:var(--sell-red); font-size:10px;">-0.8%</span></p>
-            </div>
-        </div>
-
-        <div id="market" class="screen">
-            <div class="trade-card">
-                <div class="input-box">
-                    <label>Select Stock</label>
-                    <select id="stockSelect" onchange="updateCalc()">
-                        <option value="2985">RELIANCE</option>
-                        <option value="1532">HDFCBANK</option>
-                        <option value="3945">TCS</option>
-                        <option value="1012">TATAMOTORS</option>
-                        <option value="825">SBIN</option>
-                        <option value="455">WIPRO</option>
-                        <option value="188">ZOMATO</option>
-                    </select>
-                </div>
-                <div class="input-box">
-                    <label>Quantity</label>
-                    <input type="number" id="tradeQty" value="1" min="1" oninput="updateCalc()">
-                </div>
-                <div class="calc-row">
-                    <div class="calc-item"><p>EST. INR</p><h4 id="calcInr">₹2,985</h4></div>
-                    <div class="calc-item" style="text-align:right;"><p>PAY USDC</p><h4 id="calcUsdc" style="color:var(--buy-green);">31.67 USDC</h4></div>
-                </div>
-                <div class="btn-container">
-                    <button class="trade-btn btn-buy" onclick="processTrade('BUY')">BUY</button>
-                    <button class="trade-btn btn-sell" onclick="processTrade('SELL')">SELL</button>
-                </div>
-            </div>
-            <h3 style="margin-bottom:15px;">Market Overview</h3>
-            <div id="marketList"></div>
-        </div>
-
-        <div id="portfolio" class="screen"><h3>My Assets</h3><div id="holdingsList" style="margin-top:20px;"></div></div>
-        <div id="history" class="screen"><h3>History</h3><div id="txList" style="margin-top:20px;"></div></div>
-
-        <nav class="bottom-nav">
-            <div class="nav-item active" onclick="switchTab('home', this)"><div class="nav-icon">🏠</div><div class="nav-text">Home</div></div>
-            <div class="nav-item" onclick="switchTab('market', this)"><div class="nav-icon">📈</div><div class="nav-text">Market</div></div>
-            <div class="nav-item" onclick="switchTab('portfolio', this)"><div class="nav-icon">💼</div><div class="nav-text">Portfolio</div></div>
-            <div class="nav-item" onclick="switchTab('history', this)"><div class="nav-icon">📜</div><div class="nav-text">History</div></div>
-        </nav>
-    </div>
-
-    <script>
-        const USDC_ADDR = "0x3600000000000000000000000000000000000000";
-        const MERCHANT = "0x7a67f9b3BB918182Ad94182aC10f80F9619be81C";
-        const INR_RATE = 94.25;
-        let userAddr = "", provider, signer;
-
-        const stocks = [
-            {n:"RELIANCE", p:2985}, {n:"HDFCBANK", p:1532}, {n:"TCS", p:3945}, {n:"TATAMOTORS", p:1012}, {n:"SBIN", p:825},
-            {n:"ZOMATO", p:188}, {n:"ADANIENT", p:3120}, {n:"ITC", p:420}, {n:"WIPRO", p:455}, {n:"TITAN", p:3240}
-        ];
-
-        function init() {
-            const list = document.getElementById("marketList");
-            list.innerHTML = "";
-
-            stocks.forEach(s => {
-                list.innerHTML += `<div class="watchlist-item" onclick="goToTrade('${s.p}')">
-                    <div class="w-info"><div class="w-logo" style="background:#334155;">${s.n[0]}</div><p>${s.n}</p></div>
-                    <p>₹${s.p}</p>
-                </div>`;
-            });
-        }
-
-        function goToTrade(price) {
-            switchTab('market', document.querySelectorAll('.nav-item')[1]);
-            document.getElementById('stockSelect').value = price;
-            updateCalc();
-        }
-
-        async function connect() {
-            if (!window.ethereum) {
-                alert("Please install MetaMask or open this page in MetaMask browser");
-                return;
-            }
-
+        if (window.ethereum && localStorage.getItem("isWalletConnected") === "true") {
             try {
-                const accounts = await window.ethereum.request({
-                    method: "eth_requestAccounts"
-                });
+                const accounts = await window.ethereum.request({ method: "eth_accounts" });
+                if (accounts.length > 0) {
+                    await setupWallet(accounts[0], false);
+                }
+            } catch (error) {
+                console.error("Auto wallet restore failed:", error);
+            }
+        }
 
+        if (window.ethereum) {
+            window.ethereum.on("accountsChanged", async (accounts) => {
                 if (!accounts || accounts.length === 0) {
-                    alert("No wallet account found");
+                    disconnectWalletUI();
                     return;
                 }
 
-                userAddr = accounts[0];
+                await setupWallet(accounts[0], false);
+            });
 
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                signer = provider.getSigner();
+            window.ethereum.on("chainChanged", () => {
+                window.location.reload();
+            });
+        }
+    });
 
-                const btn = document.getElementById("walletBtn");
-                const shortAddr = userAddr.substring(0, 6) + "..." + userAddr.slice(-4).toUpperCase();
+    // --- MARKET SETUP ---
+    function initMarket() {
+        const list = document.getElementById("marketList");
+        if (!list) return;
 
-                btn.innerText = shortAddr;
-                btn.classList.add("btn-connected");
+        list.innerHTML = "";
 
-                localStorage.setItem("isWalletConnected", "true");
+        stocks.forEach((stock) => {
+            const change = getRandomChange();
+            const changeColor = change >= 0 ? "var(--buy-green)" : "var(--sell-red)";
+            const changeText = `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
 
-                await fetchBalance();
-            } catch (error) {
-                console.error("Connection failed:", error);
+            list.innerHTML += `
+                <div class="watchlist-item" onclick="goToTrade('${stock.p}')">
+                    <div class="w-info">
+                        <div class="w-logo" style="background:${stock.c};">${stock.n[0]}</div>
+                        <div class="w-name">
+                            <p>${stock.n}</p>
+                            <p style="font-size:11px; color:var(--text-dim);">Indian Equity Token</p>
+                        </div>
+                    </div>
+                    <p style="font-weight:700;">
+                        ₹${stock.p.toLocaleString("en-IN")}
+                        <span style="color:${changeColor}; font-size:10px;">${changeText}</span>
+                    </p>
+                </div>
+            `;
+        });
+    }
 
-                if (error.code === 4001) {
-                    alert("Wallet connection rejected");
-                } else {
-                    alert("Wallet connection failed. Please check MetaMask.");
-                }
-            }
+    function getRandomChange() {
+        return Number((Math.random() * 6 - 2.5).toFixed(2));
+    }
+
+    // --- WALLET CORE ---
+    async function connectWallet() {
+        if (!window.ethereum) {
+            const currentUrl = window.location.href.replace(/https?:\/\//, "");
+            window.location.href = "https://metamask.app.link/dapp/" + currentUrl;
+            return;
         }
 
-        async function autoConnectWallet() {
-            if (!window.ethereum || localStorage.getItem("isWalletConnected") !== "true") return;
+        try {
+            const accounts = await window.ethereum.request({
+                method: "eth_requestAccounts"
+            });
 
-            try {
-                const accounts = await window.ethereum.request({
-                    method: "eth_accounts"
+            if (!accounts || accounts.length === 0) {
+                showValidationError("No wallet account found");
+                return;
+            }
+
+            await addOrSwitchArcChain();
+            await setupWallet(accounts[0], true);
+        } catch (error) {
+            console.error("Wallet connection failed:", error);
+
+            if (error.code === 4001) {
+                showValidationError("Wallet connection rejected");
+                return;
+            }
+
+            showValidationError(error.message || "Wallet connection failed");
+        }
+    }
+
+    async function addOrSwitchArcChain() {
+        try {
+            await window.ethereum.request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: ARC_CHAIN_ID }]
+            });
+        } catch (switchError) {
+            if (switchError.code !== 4902) {
+                throw switchError;
+            }
+
+            await window.ethereum.request({
+                method: "wallet_addEthereumChain",
+                params: [{
+                    chainId: ARC_CHAIN_ID,
+                    chainName: "Arc Testnet",
+                    rpcUrls: [RPC_URL],
+                    nativeCurrency: {
+                        name: "USDC",
+                        symbol: "USDC",
+                        decimals: 18
+                    },
+                    blockExplorerUrls: ["https://testnet.arcscan.app"]
+                }]
+            });
+
+            await window.ethereum.request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: ARC_CHAIN_ID }]
+            });
+        }
+    }
+
+    async function setupWallet(address, shouldSave) {
+        userAddress = address;
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        signer = provider.getSigner();
+
+        const btn = document.getElementById("walletBtn");
+        if (btn) {
+            btn.innerText = shortAddress(address);
+            btn.classList.add("btn-connected");
+        }
+
+        if (shouldSave) {
+            localStorage.setItem("isWalletConnected", "true");
+        }
+
+        await fetchBalance();
+    }
+
+    function disconnectWalletUI() {
+        userAddress = "";
+        provider = null;
+        signer = null;
+
+        const btn = document.getElementById("walletBtn");
+        if (btn) {
+            btn.innerText = "Connect Wallet";
+            btn.classList.remove("btn-connected");
+        }
+
+        document.getElementById("userPortfolio").innerText = "₹0.00";
+        localStorage.removeItem("isWalletConnected");
+    }
+
+    function shortAddress(address) {
+        return address.substring(0, 6) + "..." + address.slice(-4).toUpperCase();
+    }
+
+    // HTML button calls connect()
+    function connect() {
+        connectWallet();
+    }
+
+    // --- TRADE CALCULATION ---
+    function updateCalc() {
+        const stockSelect = document.getElementById("stockSelect");
+        const qtyInput = document.getElementById("tradeQty");
+
+        if (!stockSelect || !qtyInput) return;
+
+        const price = Number(stockSelect.value);
+        const qty = Math.max(1, Number(qtyInput.value || 1));
+        const inr = price * qty;
+        const usdc = inr / INR_RATE;
+
+        document.getElementById("calcInr").innerText = "₹" + inr.toLocaleString("en-IN");
+        document.getElementById("calcUsdc").innerText = usdc.toFixed(2) + " USDC";
+    }
+
+    function getSelectedStock() {
+        const price = Number(document.getElementById("stockSelect").value);
+        return stocks.find((stock) => stock.p === price) || stocks[0];
+    }
+
+    function goToTrade(price) {
+        switchTab("market", document.querySelectorAll(".nav-item")[1]);
+
+        const stockSelect = document.getElementById("stockSelect");
+        stockSelect.value = price;
+
+        updateCalc();
+    }
+
+    // --- BUY / SELL ---
+    async function processTrade(type) {
+        if (!userAddress) {
+            await connectWallet();
+            if (!userAddress) return;
+        }
+
+        const stock = getSelectedStock();
+        const qty = Math.max(1, Number(document.getElementById("tradeQty").value || 1));
+        const inrAmount = stock.p * qty;
+        const usdcAmount = inrAmount / INR_RATE;
+
+        if (type === "SELL") {
+            sellStock(stock, qty, inrAmount, usdcAmount);
+            return;
+        }
+
+        await buyStock(stock, qty, inrAmount, usdcAmount);
+    }
+
+    async function buyStock(stock, qty, inrAmount, usdcAmount) {
+        try {
+            const confirmed = confirm(`Buy ${qty} ${stock.n} for ${usdcAmount.toFixed(2)} USDC?`);
+            if (!confirmed) return;
+
+            if (!signer) {
+                showValidationError("Wallet signer not ready");
+                return;
+            }
+
+            const usdcContract = new ethers.Contract(
+                USDC_ADDR,
+                ["function transfer(address to, uint256 value) public returns (bool)"],
+                signer
+            );
+
+            const tx = await usdcContract.transfer(
+                MERCHANT_ADDRESS,
+                ethers.utils.parseUnits(usdcAmount.toFixed(6), 6)
+            );
+
+            alert("Order submitted. Waiting for confirmation...");
+            await tx.wait();
+
+            holdings[stock.n] = (holdings[stock.n] || 0) + qty;
+            saveHoldings();
+
+            addHistory({
+                type: "BUY",
+                stock: stock.n,
+                qty,
+                inrAmount,
+                usdcAmount,
+                txHash: tx.hash,
+                date: new Date().toLocaleString()
+            });
+
+            renderHoldings();
+            renderHistory();
+            await fetchBalance();
+
+            alert(`Transaction confirmed. ${stock.n} BUY completed.`);
+        } catch (error) {
+            console.error("Buy failed:", error);
+            showValidationError(error.message || "Transaction failed");
+        }
+    }
+
+    function sellStock(stock, qty, inrAmount, usdcAmount) {
+        const ownedQty = holdings[stock.n] || 0;
+
+        if (ownedQty < qty) {
+            showValidationError(`You only have ${ownedQty} ${stock.n}`);
+            return;
+        }
+
+        const confirmed = confirm(`Sell ${qty} ${stock.n}?`);
+        if (!confirmed) return;
+
+        holdings[stock.n] -= qty;
+
+        if (holdings[stock.n] <= 0) {
+            delete holdings[stock.n];
+        }
+
+        saveHoldings();
+
+        addHistory({
+            type: "SELL",
+            stock: stock.n,
+            qty,
+            inrAmount,
+            usdcAmount,
+            txHash: "LOCAL_SELL_ORDER",
+            date: new Date().toLocaleString()
+        });
+
+        renderHoldings();
+        renderHistory();
+
+        alert(`${stock.n} SELL order completed.`);
+    }
+
+    // --- BALANCE ---
+    async function fetchBalance() {
+        if (!userAddress || !provider) return;
+
+        try {
+            const usdcContract = new ethers.Contract(
+                USDC_ADDR,
+                ["function balanceOf(address account) view returns (uint256)"],
+                provider
+            );
+
+            const balance = await usdcContract.balanceOf(userAddress);
+            const formattedBalance = Number(ethers.utils.formatUnits(balance, 6));
+            const inrValue = formattedBalance * INR_RATE;
+
+            document.getElementById("userPortfolio").innerText =
+                "₹" + inrValue.toLocaleString("en-IN", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
                 });
+        } catch (error) {
+            console.error("Balance update failed:", error);
+        }
+    }
 
-                if (!accounts || accounts.length === 0) return;
+    // --- HOLDINGS ---
+    function saveHoldings() {
+        localStorage.setItem("indistockHoldings", JSON.stringify(holdings));
+    }
 
-                userAddr = accounts[0];
+    function renderHoldings() {
+        const list = document.getElementById("holdingsList");
+        if (!list) return;
 
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                signer = provider.getSigner();
+        const entries = Object.entries(holdings);
 
-                const btn = document.getElementById("walletBtn");
-                const shortAddr = userAddr.substring(0, 6) + "..." + userAddr.slice(-4).toUpperCase();
-
-                btn.innerText = shortAddr;
-                btn.classList.add("btn-connected");
-
-                await fetchBalance();
-            } catch (error) {
-                console.error("Auto connect failed:", error);
-            }
+        if (entries.length === 0) {
+            list.innerHTML = `<p style="color:var(--text-dim); font-size:13px;">No assets yet.</p>`;
+            return;
         }
 
-        function updateCalc() {
-            const price = Number(document.getElementById("stockSelect").value);
-            const qty = Number(document.getElementById("tradeQty").value || 1);
-            const inr = price * qty;
+        list.innerHTML = "";
 
-            document.getElementById("calcInr").innerText = "₹" + inr.toLocaleString("en-IN");
-            document.getElementById("calcUsdc").innerText = (inr / INR_RATE).toFixed(2) + " USDC";
+        entries.forEach(([stockName, qty]) => {
+            const stock = stocks.find((item) => item.n === stockName);
+            const price = stock ? stock.p : 0;
+            const value = price * qty;
+
+            list.innerHTML += `
+                <div class="watchlist-item" onclick="goToTrade('${price}')">
+                    <div class="w-info">
+                        <div class="w-logo" style="background:${stock ? stock.c : "#334155"};">${stockName[0]}</div>
+                        <div>
+                            <p style="font-weight:800;">${stockName}</p>
+                            <p style="font-size:11px; color:var(--text-dim);">${qty} shares</p>
+                        </div>
+                    </div>
+                    <p style="font-weight:700;">₹${value.toLocaleString("en-IN")}</p>
+                </div>
+            `;
+        });
+    }
+
+    // --- HISTORY ---
+    function addHistory(tx) {
+        history.unshift(tx);
+        history = history.slice(0, 30);
+        localStorage.setItem("indistockHistory", JSON.stringify(history));
+    }
+
+    function renderHistory() {
+        const list = document.getElementById("txList");
+        if (!list) return;
+
+        if (history.length === 0) {
+            list.innerHTML = `<p style="color:var(--text-dim); font-size:13px;">No transactions yet.</p>`;
+            return;
         }
 
-        async function processTrade(type) {
-            if (!userAddr) {
-                await connect();
-                if (!userAddr) return;
-            }
+        list.innerHTML = "";
 
-            try {
-                const usdcAmt = document.getElementById("calcUsdc").innerText.split(" ")[0];
-                const contract = new ethers.Contract(USDC_ADDR, ["function transfer(address to, uint256 value) public returns (bool)"], signer);
-                const tx = await contract.transfer(MERCHANT, ethers.utils.parseUnits(usdcAmt, 6));
+        history.forEach((tx) => {
+            const color = tx.type === "BUY" ? "var(--buy-green)" : "var(--sell-red)";
 
-                alert("Order processing...");
-                await tx.wait();
+            list.innerHTML += `
+                <div class="watchlist-item">
+                    <div>
+                        <p style="font-weight:800; color:${color};">${tx.type} ${tx.stock}</p>
+                        <p style="font-size:11px; color:var(--text-dim);">${tx.qty} shares • ${tx.date}</p>
+                    </div>
+                    <div style="text-align:right;">
+                        <p style="font-weight:700;">${tx.usdcAmount.toFixed(2)} USDC</p>
+                        <p style="font-size:10px; color:var(--text-dim);">₹${tx.inrAmount.toLocaleString("en-IN")}</p>
+                    </div>
+                </div>
+            `;
+        });
+    }
 
-                alert(`Transaction Confirmed! Stock ${type} completed.`);
-                fetchBalance();
-            } catch (e) {
-                console.error("Transaction failed:", e);
-                alert("Transaction Failed!");
-            }
+    // --- UI HELPERS ---
+    function switchTab(id, el) {
+        document.querySelectorAll(".screen").forEach((screen) => {
+            screen.classList.remove("active");
+        });
+
+        document.getElementById(id).classList.add("active");
+
+        document.querySelectorAll(".nav-item").forEach((nav) => {
+            nav.classList.remove("active");
+        });
+
+        if (el) {
+            el.classList.add("active");
         }
+    }
 
-        function switchTab(id, el) {
-            document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-            document.getElementById(id).classList.add("active");
+    function showValidationError(message) {
+        const validModal = document.getElementById("validModal");
+        const validText = document.getElementById("validText");
 
-            document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
-            if (el) el.classList.add("active");
+        if (validModal && validText) {
+            validText.innerText = String(message).toUpperCase();
+            validModal.classList.remove("hidden");
+        } else {
+            alert(message);
         }
-
-        async function fetchBalance() {
-            if (!userAddr || !provider) return;
-
-            try {
-                const contract = new ethers.Contract(USDC_ADDR, ["function balanceOf(address) view returns (uint256)"], provider);
-                const bal = await contract.balanceOf(userAddr);
-                const f = Number(ethers.utils.formatUnits(bal, 6));
-
-                document.getElementById("userPortfolio").innerText =
-                    "₹" + (f * INR_RATE).toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                    });
-            } catch (e) {
-                console.error("Balance update failed:", e);
-            }
-        }
-
-        window.onload = function () {
-            init();
-            updateCalc();
-            autoConnectWallet();
-        };
-    </script>
-</body>
-</html>
+    }
+</script>
