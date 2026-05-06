@@ -318,7 +318,7 @@ async function confirmPendingTrade() {
     if (type === "BUY") {
         await executeBuyStock(stock, qty, inrAmount, usdcAmount);
     } else {
-        executeSellStock(stock, qty, inrAmount, usdcAmount);
+        await executeSellStock(stock, qty, inrAmount, usdcAmount);
     }
 }
 
@@ -369,38 +369,61 @@ async function executeBuyStock(stock, qty, inrAmount, usdcAmount) {
     }
 }
 
-function executeSellStock(stock, qty, inrAmount, usdcAmount) {
-    const ownedQty = holdings[stock.n] || 0;
+async function executeSellStock(stock, qty, inrAmount, usdcAmount) {
+    try {
+        const ownedQty = holdings[stock.n] || 0;
 
-    if (ownedQty < qty) {
+        if (ownedQty < qty) {
+            resetTradeConfirmButton("SELL");
+            showValidationError(`You only have ${ownedQty} ${stock.n}`);
+            return;
+        }
+
+        const response = await fetch("/api/sell", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                userAddress,
+                usdcAmount: usdcAmount.toFixed(6)
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "Sell payout failed");
+        }
+
+        holdings[stock.n] -= qty;
+
+        if (holdings[stock.n] <= 0) {
+            delete holdings[stock.n];
+        }
+
+        saveHoldings();
+
+        addHistory({
+            type: "SELL",
+            stock: stock.n,
+            qty,
+            inrAmount,
+            usdcAmount,
+            txHash: data.txHash,
+            date: new Date().toLocaleString()
+        });
+
+        renderHoldings();
+        renderHistory();
+        updatePortfolioValue();
+
+        showTradeSuccess("SELL", stock, qty, usdcAmount);
+    } catch (error) {
+        console.error("Sell failed:", error);
         resetTradeConfirmButton("SELL");
-        showValidationError(`You only have ${ownedQty} ${stock.n}`);
-        return;
+        showValidationError(error.message || "Sell failed");
     }
-
-    holdings[stock.n] -= qty;
-
-    if (holdings[stock.n] <= 0) {
-        delete holdings[stock.n];
-    }
-
-    saveHoldings();
-
-    addHistory({
-        type: "SELL",
-        stock: stock.n,
-        qty,
-        inrAmount,
-        usdcAmount,
-        txHash: "LOCAL_SELL_ORDER",
-        date: new Date().toLocaleString()
-    });
-
-    renderHoldings();
-    renderHistory();
-    updatePortfolioValue();
-
-    showTradeSuccess("SELL", stock, qty, usdcAmount);
 }
 
 function showTradeSuccess(type, stock, qty, usdcAmount) {
@@ -514,12 +537,17 @@ function renderHistory() {
 
     history.forEach((tx) => {
         const color = tx.type === "BUY" ? "var(--buy-green)" : "var(--sell-red)";
+        const hasRealTx = tx.txHash && tx.txHash !== "LOCAL_SELL_ORDER";
+        const explorerUrl = `https://testnet.arcscan.app/tx/${tx.txHash}`;
 
         list.innerHTML += `
-            <div class="watchlist-item">
+            <div class="watchlist-item" ${hasRealTx ? `onclick="window.open('${explorerUrl}', '_blank')"` : ""}>
                 <div>
                     <p style="font-weight:800; color:${color};">${tx.type} ${tx.stock}</p>
                     <p style="font-size:11px; color:var(--text-dim);">${tx.qty} ${tx.qty === 1 ? "share" : "shares"} • ${tx.date}</p>
+                    <p style="font-size:10px; color:${hasRealTx ? "var(--accent-blue)" : "var(--text-dim)"};">
+                        ${hasRealTx ? "View on Arcscan" : "Local sell order"}
+                    </p>
                 </div>
                 <div style="text-align:right;">
                     <p style="font-weight:700;">${tx.usdcAmount.toFixed(2)} USDC</p>
