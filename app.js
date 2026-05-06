@@ -53,6 +53,7 @@ window.addEventListener("load", async () => {
         updateCalc();
         renderHoldings();
         renderHistory();
+        updatePortfolioValue();
 
         if (window.ethereum && localStorage.getItem("isWalletConnected") === "true") {
             try {
@@ -201,7 +202,7 @@ async function setupWallet(address, shouldSave) {
         localStorage.setItem("isWalletConnected", "true");
     }
 
-    await fetchBalance();
+    updatePortfolioValue();
 }
 
 function disconnectWalletUI() {
@@ -215,7 +216,7 @@ function disconnectWalletUI() {
         btn.classList.remove("btn-connected");
     }
 
-    document.getElementById("userPortfolio").innerText = "₹0.00";
+    updatePortfolioValue();
     localStorage.removeItem("isWalletConnected");
 }
 
@@ -316,7 +317,7 @@ async function buyStock(stock, qty, inrAmount, usdcAmount) {
 
         renderHoldings();
         renderHistory();
-        await fetchBalance();
+        updatePortfolioValue();
 
         alert(`Transaction confirmed. ${stock.n} BUY completed.`);
     } catch (error) {
@@ -356,34 +357,36 @@ function sellStock(stock, qty, inrAmount, usdcAmount) {
 
     renderHoldings();
     renderHistory();
+    updatePortfolioValue();
 
     alert(`${stock.n} SELL order completed.`);
 }
 
-async function fetchBalance() {
-    if (!userAddress || !provider) return;
+function getPortfolioValue() {
+    let totalValue = 0;
 
-    try {
-        await loadEthers();
+    Object.entries(holdings).forEach(([stockName, qty]) => {
+        const stock = stocks.find((item) => item.n === stockName);
 
-        const usdcContract = new ethers.Contract(
-            USDC_ADDR,
-            ["function balanceOf(address account) view returns (uint256)"],
-            provider
-        );
+        if (stock) {
+            totalValue += stock.p * qty;
+        }
+    });
 
-        const balance = await usdcContract.balanceOf(userAddress);
-        const formattedBalance = Number(ethers.utils.formatUnits(balance, 6));
-        const inrValue = formattedBalance * INR_RATE;
+    return totalValue;
+}
 
-        document.getElementById("userPortfolio").innerText =
-            "₹" + inrValue.toLocaleString("en-IN", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
-    } catch (error) {
-        console.error("Balance update failed:", error);
-    }
+function updatePortfolioValue() {
+    const totalValue = getPortfolioValue();
+    const portfolioEl = document.getElementById("userPortfolio");
+
+    if (!portfolioEl) return;
+
+    portfolioEl.innerText =
+        "₹" + totalValue.toLocaleString("en-IN", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
 }
 
 function saveHoldings() {
