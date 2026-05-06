@@ -28,6 +28,7 @@ const INR_RATE = 94.25;
 let userAddress = "";
 let provider;
 let signer;
+let pendingTrade = null;
 
 const stocks = [
     { n: "RELIANCE", p: 2985, c: "#e31e24" },
@@ -268,20 +269,62 @@ async function processTrade(type) {
     const inrAmount = stock.p * qty;
     const usdcAmount = inrAmount / INR_RATE;
 
-    if (type === "SELL") {
-        sellStock(stock, qty, inrAmount, usdcAmount);
-        return;
-    }
-
-    await buyStock(stock, qty, inrAmount, usdcAmount);
+    openTradeModal(type, stock, qty, inrAmount, usdcAmount);
 }
 
-async function buyStock(stock, qty, inrAmount, usdcAmount) {
+function openTradeModal(type, stock, qty, inrAmount, usdcAmount) {
+    pendingTrade = { type, stock, qty, inrAmount, usdcAmount };
+
+    const isBuy = type === "BUY";
+    const now = new Date().toLocaleString("en-IN");
+
+    document.getElementById("tradeModalTitle").innerText = isBuy ? "Confirm Buy Order" : "Confirm Sell Order";
+    document.getElementById("tradeModalSubtitle").innerText = isBuy ? "Review before placing buy order" : "Review before placing sell order";
+
+    const icon = document.getElementById("tradeModalIcon");
+    icon.innerText = isBuy ? "↑" : "↓";
+    icon.classList.toggle("sell", !isBuy);
+
+    document.getElementById("modalStockName").innerText = stock.n;
+    document.getElementById("modalQty").innerText = qty + (qty === 1 ? " share" : " shares");
+    document.getElementById("modalAmount").innerText = usdcAmount.toFixed(2) + " USDC";
+    document.getElementById("modalDateTime").innerText = now;
+
+    const confirmBtn = document.getElementById("modalConfirmBtn");
+    confirmBtn.disabled = false;
+    confirmBtn.innerText = isBuy ? "Buy Now" : "Sell Now";
+    confirmBtn.classList.toggle("sell", !isBuy);
+    confirmBtn.onclick = confirmPendingTrade;
+
+    document.getElementById("tradeModalActions").classList.remove("hidden");
+    document.getElementById("modalDoneBtn").classList.add("hidden");
+    document.getElementById("tradeModal").classList.remove("hidden");
+}
+
+function closeTradeModal() {
+    document.getElementById("tradeModal").classList.add("hidden");
+    pendingTrade = null;
+}
+
+async function confirmPendingTrade() {
+    if (!pendingTrade) return;
+
+    const { type, stock, qty, inrAmount, usdcAmount } = pendingTrade;
+    const confirmBtn = document.getElementById("modalConfirmBtn");
+
+    confirmBtn.disabled = true;
+    confirmBtn.innerText = type === "BUY" ? "Buying..." : "Selling...";
+
+    if (type === "BUY") {
+        await executeBuyStock(stock, qty, inrAmount, usdcAmount);
+    } else {
+        executeSellStock(stock, qty, inrAmount, usdcAmount);
+    }
+}
+
+async function executeBuyStock(stock, qty, inrAmount, usdcAmount) {
     try {
         await loadEthers();
-
-        const confirmed = confirm(`Buy ${qty} ${stock.n} for ${usdcAmount.toFixed(2)} USDC?`);
-        if (!confirmed) return;
 
         if (!signer) {
             showValidationError("Wallet signer not ready");
@@ -299,7 +342,6 @@ async function buyStock(stock, qty, inrAmount, usdcAmount) {
             ethers.utils.parseUnits(usdcAmount.toFixed(6), 6)
         );
 
-        alert("Order submitted. Waiting for confirmation...");
         await tx.wait();
 
         holdings[stock.n] = (holdings[stock.n] || 0) + qty;
@@ -319,23 +361,22 @@ async function buyStock(stock, qty, inrAmount, usdcAmount) {
         renderHistory();
         updatePortfolioValue();
 
-        alert(`Transaction confirmed. ${stock.n} BUY completed.`);
+        showTradeSuccess("BUY", stock, qty, usdcAmount);
     } catch (error) {
         console.error("Buy failed:", error);
+        resetTradeConfirmButton("BUY");
         showValidationError(error.message || "Transaction failed");
     }
 }
 
-function sellStock(stock, qty, inrAmount, usdcAmount) {
+function executeSellStock(stock, qty, inrAmount, usdcAmount) {
     const ownedQty = holdings[stock.n] || 0;
 
     if (ownedQty < qty) {
+        resetTradeConfirmButton("SELL");
         showValidationError(`You only have ${ownedQty} ${stock.n}`);
         return;
     }
-
-    const confirmed = confirm(`Sell ${qty} ${stock.n}?`);
-    if (!confirmed) return;
 
     holdings[stock.n] -= qty;
 
@@ -359,7 +400,35 @@ function sellStock(stock, qty, inrAmount, usdcAmount) {
     renderHistory();
     updatePortfolioValue();
 
-    alert(`${stock.n} SELL order completed.`);
+    showTradeSuccess("SELL", stock, qty, usdcAmount);
+}
+
+function showTradeSuccess(type, stock, qty, usdcAmount) {
+    const isBuy = type === "BUY";
+
+    const icon = document.getElementById("tradeModalIcon");
+    icon.innerText = "✓";
+    icon.classList.toggle("sell", !isBuy);
+
+    document.getElementById("tradeModalTitle").innerText = isBuy ? "Buy Successful" : "Sell Successful";
+    document.getElementById("tradeModalSubtitle").innerText = `${stock.n} order completed successfully`;
+    document.getElementById("modalStockName").innerText = stock.n;
+    document.getElementById("modalQty").innerText = qty + (qty === 1 ? " share" : " shares");
+    document.getElementById("modalAmount").innerText = usdcAmount.toFixed(2) + " USDC";
+    document.getElementById("modalDateTime").innerText = new Date().toLocaleString("en-IN");
+
+    document.getElementById("tradeModalActions").classList.add("hidden");
+    document.getElementById("modalDoneBtn").classList.remove("hidden");
+}
+
+function resetTradeConfirmButton(type) {
+    const isBuy = type === "BUY";
+    const confirmBtn = document.getElementById("modalConfirmBtn");
+
+    if (!confirmBtn) return;
+
+    confirmBtn.disabled = false;
+    confirmBtn.innerText = isBuy ? "Buy Now" : "Sell Now";
 }
 
 function getPortfolioValue() {
@@ -417,7 +486,7 @@ function renderHoldings() {
                     <div class="w-logo" style="background:${stock ? stock.c : "#334155"};">${stockName[0]}</div>
                     <div>
                         <p style="font-weight:800;">${stockName}</p>
-                        <p style="font-size:11px; color:var(--text-dim);">${qty} shares</p>
+                        <p style="font-size:11px; color:var(--text-dim);">${qty} ${qty === 1 ? "share" : "shares"}</p>
                     </div>
                 </div>
                 <p style="font-weight:700;">₹${value.toLocaleString("en-IN")}</p>
@@ -450,7 +519,7 @@ function renderHistory() {
             <div class="watchlist-item">
                 <div>
                     <p style="font-weight:800; color:${color};">${tx.type} ${tx.stock}</p>
-                    <p style="font-size:11px; color:var(--text-dim);">${tx.qty} shares • ${tx.date}</p>
+                    <p style="font-size:11px; color:var(--text-dim);">${tx.qty} ${tx.qty === 1 ? "share" : "shares"} • ${tx.date}</p>
                 </div>
                 <div style="text-align:right;">
                     <p style="font-weight:700;">${tx.usdcAmount.toFixed(2)} USDC</p>
